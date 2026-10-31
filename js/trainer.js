@@ -64,7 +64,7 @@ export async function trainCompetition(options) {
       onProgress({
         gen,
         total: generations,
-        phase: "시작 실력",
+        phase: "Opening strength",
         a: scoreA,
         b: scoreB,
         history,
@@ -88,7 +88,7 @@ export async function trainCompetition(options) {
       onProgress({
         gen,
         total: generations,
-        phase: `A 후보 ${i + 1}/${candA.length}`,
+        phase: `A candidate ${i + 1}/${candA.length}`,
         a: bestA.score,
         b: bestB.score,
         history,
@@ -103,7 +103,7 @@ export async function trainCompetition(options) {
       onProgress({
         gen,
         total: generations,
-        phase: `B 후보 ${i + 1}/${candB.length}`,
+        phase: `B candidate ${i + 1}/${candB.length}`,
         a: bestA.score,
         b: bestB.score,
         history,
@@ -124,7 +124,7 @@ export async function trainCompetition(options) {
     onProgress({
       gen,
       total: generations,
-      phase: `${gen}세대 확정`,
+      phase: `Generation ${gen} locked`,
       a: bestA.score,
       b: bestB.score,
       history,

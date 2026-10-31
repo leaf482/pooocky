@@ -6,26 +6,26 @@ export function builtinPresets() {
   return [
     {
       id: "minimax-base",
-      name: "미니맥스 기본",
+      name: "Baseline",
       algorithm: "minimax",
       builtin: true,
-      blurb: "에쿼티 계산 뒤 폴드·콜·리레이즈를 2수까지 비교하는 기준 스타일입니다.",
+      blurb: "Estimates equity, then compares fold, call, and reraise two plies deep.",
       params: cloneParams(BASE_PARAMS),
     },
     {
       id: "minimax-tight",
-      name: "미니맥스 타이트",
+      name: "Tight",
       algorithm: "minimax",
       builtin: true,
-      blurb: "강한 패 위주로 콜하고, 블러프와 큰 벳을 아낍니다.",
+      blurb: "Continues with strong hands. Fewer bluffs and smaller bets.",
       params: cloneParams(TIGHT_PARAMS),
     },
     {
       id: "minimax-loose",
-      name: "미니맥스 루즈",
+      name: "Loose",
       algorithm: "minimax",
       builtin: true,
-      blurb: "넓은 레인지로 콜하고, 블러프와 큰 사이즈를 더 자주 씁니다.",
+      blurb: "Wider calls, more bluffs, and larger bet sizes.",
       params: cloneParams(LOOSE_PARAMS),
     },
   ];
@@ -46,13 +46,13 @@ export function newPresetId() {
 
 export function normalizePreset(raw) {
   if (!raw || typeof raw !== "object") return null;
-  const name = String(raw.name || "가져온 프리셋").slice(0, 32);
+  const name = String(raw.name || "Imported preset").slice(0, 32);
   return {
     id: typeof raw.id === "string" && raw.id ? raw.id : newPresetId(),
     name,
     algorithm: "minimax",
     builtin: false,
-    blurb: String(raw.blurb || "사용자가 저장한 미니맥스 파라미터입니다.").slice(0, 140),
+    blurb: String(raw.blurb || "Saved minimax parameters.").slice(0, 140),
     params: sanitizeParams(raw.params),
     origin: raw.origin || "user",
     generation: Number.isFinite(raw.generation) ? raw.generation : null,

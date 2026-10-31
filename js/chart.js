@@ -15,9 +15,9 @@ export function drawChart(canvas, series, options = {}) {
   const longest = lists.reduce((n, data) => Math.max(n, data.length), 0);
 
   ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
-  ctx.font = "12px 'Inter Tight', 'IBM Plex Sans KR', sans-serif";
+  ctx.font = "12px 'Inter Tight', 'Segoe UI', sans-serif";
   if (longest < 2) {
-    ctx.fillText(options.empty || "아직 데이터가 없습니다", pad.l, pad.t + 18);
+    ctx.fillText(options.empty || "No data yet", pad.l, pad.t + 18);
     return;
   }
 
@@ -58,7 +58,7 @@ export function drawChart(canvas, series, options = {}) {
   }
 
   ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
-  ctx.font = "11px 'Inter Tight', 'IBM Plex Sans KR', sans-serif";
+  ctx.font = "11px 'Inter Tight', 'Segoe UI', sans-serif";
   ctx.fillText(formatTick(max), 4, pad.t + 10);
   ctx.fillText(formatTick(min), 4, pad.t + plotH);
 

@@ -11,19 +11,19 @@ const STREET_NEXT = {
 function actionLabel(name, action) {
   switch (action.type) {
     case "fold":
-      return `${name} 폴드`;
+      return `${name} folds`;
     case "check":
-      return `${name} 체크`;
+      return `${name} checks`;
     case "call":
-      return `${name} 콜 ${action.put}`;
+      return `${name} calls ${action.put}`;
     case "bet":
-      return `${name} 벳 ${action.put}`;
+      return `${name} bets ${action.put}`;
     case "raise":
-      return `${name} 레이즈 ${action.total}`;
+      return `${name} raises to ${action.total}`;
     case "allin":
-      return `${name} 올인 ${action.total}`;
+      return `${name} all-in ${action.total}`;
     default:
-      return `${name} 대기`;
+      return `${name} waits`;
   }
 }
 
@@ -254,7 +254,7 @@ export class PokerEngine {
     const name = this.players[seat].name;
     if (!chosen) {
       this.endRound();
-      return { seat, action: { type: "none", put: 0 }, text: `${name} 진행`, street: this.street, pot: this.totalPot() };
+      return { seat, action: { type: "none", put: 0 }, text: `${name} continues`, street: this.street, pot: this.totalPot() };
     }
 
     const h = this.hand[seat];
@@ -411,7 +411,7 @@ export class PokerEngine {
     if (this.street === "complete" || this.paying) return;
     this.returnUncalled();
     this.collectBets();
-    this.payPot(winner, "fold", "폴드");
+    this.payPot(winner, "fold", "Fold");
   }
 
   payPot(winner, kind, title, scores) {
@@ -428,7 +428,7 @@ export class PokerEngine {
       this.players[winner].stack += amount;
     }
     this.pot = 0;
-    this.finish(kind, winner, title || (kind === "fold" ? "폴드" : "쇼다운"), scores);
+    this.finish(kind, winner, title || (kind === "fold" ? "Fold" : "Showdown"), scores);
   }
 
   finish(kind, winner, title, scores) {
@@ -490,16 +490,16 @@ export class PokerEngine {
 export function streetLabel(street) {
   switch (street) {
     case "preflop":
-      return "프리플랍";
+      return "Preflop";
     case "flop":
-      return "플랍";
+      return "Flop";
     case "turn":
-      return "턴";
+      return "Turn";
     case "river":
-      return "리버";
+      return "River";
     case "complete":
-      return "쇼다운";
+      return "Showdown";
     default:
-      return "대기";
+      return "Idle";
   }
 }

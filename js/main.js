@@ -22,8 +22,8 @@ const state = {
   editorId: "minimax-base",
   draft: null,
   seats: [
-    { presetId: "minimax-base", name: "미니맥스 기본", params: null },
-    { presetId: "minimax-tight", name: "미니맥스 타이트", params: null },
+    { presetId: "minimax-base", name: "Baseline", params: null },
+    { presetId: "minimax-tight", name: "Tight", params: null },
   ],
   reveal: true,
   speed: "normal",
@@ -37,8 +37,8 @@ const state = {
   log: [],
   equity: [null, null],
   bubbles: ["", ""],
-  banner: "대국을 시작하면 두 AI가 앉습니다.",
-  trainPhase: "대기",
+  banner: "Start a match to seat both AIs.",
+  trainPhase: "Idle",
 };
 
 let engine = new PokerEngine({ seed: (Math.random() * 0x100000000) >>> 0 });
@@ -60,7 +60,7 @@ refreshPresets();
 state.seats[0].params = cloneParams(presetById("minimax-base").params);
 state.seats[1].params = cloneParams(presetById("minimax-tight").params);
 state.draft = {
-  name: "미니맥스 기본",
+  name: "Baseline",
   params: cloneParams(state.seats[0].params),
 };
 
@@ -77,7 +77,7 @@ function esc(value) {
 }
 
 function chip(n) {
-  return Math.round(n).toLocaleString("ko-KR");
+  return Math.round(n).toLocaleString("en-US");
 }
 
 function signedBb(chips) {
@@ -105,16 +105,16 @@ function hiddenCards() {
 function paintStats() {
   const sessions = engine.sessionWins[0] + engine.sessionWins[1];
   const items = [
-    ["핸드", engine.handsPlayed.toLocaleString("ko-KR")],
-    ["A 누적", `${signedBb(engine.profit[0])} bb`],
-    ["B 누적", `${signedBb(engine.profit[1])} bb`],
-    ["세션", `${engine.sessionWins[0]} : ${engine.sessionWins[1]}`],
+    ["Hands", engine.handsPlayed.toLocaleString("en-US")],
+    ["AI A", `${signedBb(engine.profit[0])} bb`],
+    ["AI B", `${signedBb(engine.profit[1])} bb`],
+    ["Sessions", `${engine.sessionWins[0]}–${engine.sessionWins[1]}`],
   ];
   $("statbar").innerHTML = items
     .map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`)
     .join("");
   if (!sessions && engine.handsPlayed === 0) {
-    $("statbar").querySelectorAll("dd")[3].textContent = "0 : 0";
+    $("statbar").querySelectorAll("dd")[3].textContent = "0–0";
   }
 }
 
@@ -130,26 +130,30 @@ function paintTable() {
     const eq = state.equity[seat];
     node.innerHTML = `
       <div class="who">
-        <strong>AI ${seat === 0 ? "A" : "B"}</strong>
-        <span class="pname">${esc(state.seats[seat].name)}</span>
+        <div class="id">
+          <strong>AI ${seat === 0 ? "A" : "B"}</strong>
+          <span class="pname">${esc(state.seats[seat].name)}</span>
+        </div>
         <span class="stack">${chip(engine.players[seat].stack)}</span>
       </div>
       <div class="holes">${holeHTML}</div>
       <div class="bubble">${esc(state.bubbles[seat] || "")}</div>
-      <div class="eq">${eq == null ? "" : `에쿼티 ${Math.round(eq * 100)}%`}</div>
+      <div class="eq">${eq == null ? "" : `Equity ${Math.round(eq * 100)}%`}</div>
     `;
   }
   const board = engine.board || [];
   $("board").innerHTML = [0, 1, 2, 3, 4].map((index) => cardHTML(board[index], false)).join("");
-  if (!engine.hand || engine.street === "idle") $("pot").textContent = "팟 —";
-  else if (engine.street === "complete") $("pot").textContent = "정산";
-  else $("pot").textContent = `팟 ${chip(engine.totalPot())} · ${streetLabel(engine.street)}`;
+  if (!engine.hand || engine.street === "idle") $("pot").textContent = "Pot —";
+  else if (engine.street === "complete") $("pot").textContent = "Settled";
+  else $("pot").textContent = `Pot ${chip(engine.totalPot())} · ${streetLabel(engine.street)}`;
   $("banner").textContent = state.banner;
-  $("log").innerHTML = state.log.map((line) => `<p>${esc(line)}</p>`).join("");
+  $("log").innerHTML = state.log.length
+    ? state.log.map((line) => `<p>${esc(line)}</p>`).join("")
+    : `<p class="empty">Actions appear here.</p>`;
 }
 
 function paintControls() {
-  $("btn-run").textContent = state.running ? "일시정지" : "대국 시작";
+  $("btn-run").textContent = state.running ? "Pause" : "Start";
   $("btn-run").disabled = state.training;
   $("btn-step").disabled = state.running || state.training;
   $("btn-reset").disabled = state.training;
@@ -162,7 +166,7 @@ function paintControls() {
 
 function paintCharts() {
   drawChart($("match-chart"), [{ name: "AI A", color: "#ffffff", data: state.profitSeries }], {
-    empty: "핸드가 쌓이면 누적 bb가 그려집니다",
+    empty: "No hands yet",
   });
   drawChart(
     $("growth-chart"),
@@ -170,7 +174,7 @@ function paintCharts() {
       { name: "A", color: "#ffffff", data: state.growthA },
       { name: "B", color: "rgba(255,255,255,0.45)", data: state.growthB },
     ],
-    { empty: "학습을 시작하면 세대별 실력이 보입니다" },
+    { empty: "No generations yet" },
   );
 }
 
@@ -179,7 +183,7 @@ function paintTrain() {
 }
 
 function styleLine(params) {
-  return `타이트 ${params.tightness.toFixed(2)} · 공격 ${params.aggression.toFixed(2)} · 블러프 ${params.bluff.toFixed(2)}`;
+  return `Tight ${params.tightness.toFixed(2)}  ·  Aggr ${params.aggression.toFixed(2)}  ·  Bluff ${params.bluff.toFixed(2)}`;
 }
 
 function paintSeats() {
@@ -191,7 +195,7 @@ function paintSeats() {
       })
       .join("");
   $("seat-panel").innerHTML = `
-    <h2>자리</h2>
+    <h2>Seats</h2>
     ${[0, 1]
       .map((seat) => {
         const letter = seat === 0 ? "A" : "B";
@@ -200,9 +204,9 @@ function paintSeats() {
         const custom = !known || !sameParams(known.params, current.params);
         return `
           <div class="seat-box">
-            <header><strong>AI ${letter}</strong><span>${custom ? "직접 수정" : esc(current.name)}</span></header>
-            <select data-seat="${seat}" aria-label="AI ${letter} 프리셋">
-              ${custom ? `<option value="" selected>직접 수정</option>` : ""}
+            <header><strong>AI ${letter}</strong><span>${custom ? "Edited" : esc(current.name)}</span></header>
+            <select data-seat="${seat}" aria-label="AI ${letter} preset">
+              ${custom ? `<option value="" selected>Edited</option>` : ""}
               ${options(custom ? "" : current.presetId)}
             </select>
             <p class="tiny">${styleLine(current.params)}</p>
@@ -217,7 +221,7 @@ function paintEditor() {
   const rows = state.presets
     .map((preset) => {
       const stat = preset.stats && Number.isFinite(preset.stats.ref)
-        ? `<small>기준 대비 ${preset.stats.ref >= 0 ? "+" : ""}${preset.stats.ref.toFixed(1)} bb/100</small>`
+        ? `<small>${preset.stats.ref >= 0 ? "+" : ""}${preset.stats.ref.toFixed(1)} bb/100 vs baseline</small>`
         : `<small>${esc(preset.blurb || "")}</small>`;
       return `<button type="button" class="row${preset.id === state.editorId ? " selected" : ""}" data-act="pick" data-id="${esc(preset.id)}"><b>${esc(preset.name)}</b>${stat}</button>`;
     })
@@ -232,20 +236,20 @@ function paintEditor() {
       </label>`;
   }).join("");
   $("editor-panel").innerHTML = `
-    <h2>프리셋</h2>
-    <p class="hint">${esc(selected?.blurb || "저장한 숫자를 고치거나, 학습 결과를 앉힐 수 있습니다.")}</p>
+    <h2>Presets</h2>
+    <p class="hint">${esc(selected?.blurb || "Tune the numbers, then seat the result.")}</p>
     <div class="list">${rows}</div>
-    <input id="preset-name" maxlength="32" value="${esc(state.draft.name)}" aria-label="프리셋 이름" />
+    <input id="preset-name" maxlength="32" value="${esc(state.draft.name)}" aria-label="Preset name" />
     ${sliders}
-    <div class="control-row">
-      <button type="button" data-act="apply" data-seat="0">A에 적용</button>
-      <button type="button" data-act="apply" data-seat="1">B에 적용</button>
-      <button type="button" data-act="save">프리셋 저장</button>
+    <div class="actions">
+      <button type="button" data-act="apply" data-seat="0">Seat A</button>
+      <button type="button" data-act="apply" data-seat="1">Seat B</button>
+      <button type="button" class="primary" data-act="save">Save</button>
     </div>
-    <div class="control-row">
-      <button type="button" data-act="export">내보내기</button>
-      <button type="button" data-act="import">가져오기</button>
-      <button type="button" data-act="delete" ${selected?.builtin ? "disabled" : ""}>삭제</button>
+    <div class="actions quiet">
+      <button type="button" data-act="export">Export</button>
+      <button type="button" data-act="import">Import</button>
+      <button type="button" data-act="delete" ${selected?.builtin ? "disabled" : ""}>Delete</button>
     </div>
     <input id="import-file" type="file" accept="application/json,.json" hidden />
   `;
@@ -265,10 +269,10 @@ function pushLog(line) {
 
 function onHandComplete() {
   const result = engine.result;
-  const who = result.winner < 0 ? "스플릿" : result.winner === 0 ? "AI A" : "AI B";
-  state.banner = result.winner < 0 ? `스플릿 · ${result.title}` : `${who} 승리 · ${result.title}`;
-  if (result.sessionWinner === 0) state.banner += " · AI A가 세션을 가져갔습니다";
-  if (result.sessionWinner === 1) state.banner += " · AI B가 세션을 가져갔습니다";
+  const who = result.winner < 0 ? "Split" : result.winner === 0 ? "AI A" : "AI B";
+  state.banner = result.winner < 0 ? `Split · ${result.title}` : `${who} wins · ${result.title}`;
+  if (result.sessionWinner === 0) state.banner += " · AI A takes the session";
+  if (result.sessionWinner === 1) state.banner += " · AI B takes the session";
   state.profitSeries.push(engine.profit[0] / engine.bb);
   if (state.profitSeries.length > 2000) {
     state.profitSeries = state.profitSeries.filter((_, index) => index % 2 === 0);
@@ -283,7 +287,7 @@ function playOneAction() {
     engine.startHand();
     state.bubbles = ["", ""];
     state.equity = [null, null];
-    state.banner = `핸드 ${engine.handsPlayed + 1} · ${streetLabel(engine.street)}`;
+    state.banner = `Hand ${engine.handsPlayed + 1} · ${streetLabel(engine.street)}`;
     pushLog(state.banner);
     return;
   }
@@ -331,7 +335,7 @@ async function runLoop() {
       }
     }
   } catch (error) {
-    state.banner = error.message || "대국 중 오류";
+    state.banner = error.message || "Match error";
     state.running = false;
     console.error(error);
   }
@@ -364,7 +368,7 @@ function applyReset() {
   state.log = [];
   state.equity = [null, null];
   state.bubbles = ["", ""];
-  state.banner = "세션을 초기화했습니다. 프리셋은 그대로입니다.";
+  state.banner = "Session reset. Presets kept.";
 }
 
 function requestReset() {
@@ -389,7 +393,7 @@ function applyPresetToSeat(seat, id) {
 
 function readDraftFromInputs() {
   const name = $("preset-name");
-  if (name) state.draft.name = name.value.trim().slice(0, 32) || "이름 없는 프리셋";
+  if (name) state.draft.name = name.value.trim().slice(0, 32) || "Unnamed preset";
 }
 
 function applyDraft(seat) {
@@ -410,7 +414,7 @@ function saveDraft() {
     name: state.draft.name,
     params: state.draft.params,
     origin: "user",
-    blurb: "직접 조정한 미니맥스 파라미터",
+    blurb: "Hand-tuned minimax parameters.",
   });
   state.userPresets.push(preset);
   saveUserPresets(state.userPresets);
@@ -427,7 +431,7 @@ function deleteSelected() {
   saveUserPresets(state.userPresets);
   refreshPresets();
   state.editorId = "minimax-base";
-  state.draft = { name: "미니맥스 기본", params: cloneParams(presetById("minimax-base").params) };
+  state.draft = { name: "Baseline", params: cloneParams(presetById("minimax-base").params) };
   paintEditor();
   paintSeats();
 }
@@ -448,7 +452,7 @@ function exportPresets() {
 async function importPresets(file) {
   const data = JSON.parse(await file.text());
   const list = Array.isArray(data) ? data : data.presets;
-  if (!Array.isArray(list)) throw new Error("프리셋 목록이 없습니다");
+  if (!Array.isArray(list)) throw new Error("Preset list is missing");
   for (const raw of list) {
     const preset = normalizePreset({ ...raw, id: newPresetId(), builtin: false });
     if (preset) state.userPresets.push(preset);
@@ -463,7 +467,7 @@ async function importPresets(file) {
   }
   paintEditor();
   paintSeats();
-  state.trainPhase = `프리셋 ${list.length}개를 가져왔습니다.`;
+  state.trainPhase = `Imported ${list.length} preset${list.length === 1 ? "" : "s"}.`;
   paintTrain();
 }
 
@@ -475,11 +479,11 @@ function rememberGrowth(history) {
 function adoptTrained(side, params, score, gen) {
   const ref = score && Number.isFinite(score.ref) ? score.ref : null;
   const preset = normalizePreset({
-    name: `${side} ${gen}세대`,
+    name: `${side} gen ${gen}`,
     params,
     origin: "train",
     generation: gen,
-    blurb: ref == null ? "경쟁 학습으로 만든 프리셋" : `기준 대비 ${ref >= 0 ? "+" : ""}${ref.toFixed(1)} bb/100`,
+    blurb: ref == null ? "Trained minimax parameters." : `${ref >= 0 ? "+" : ""}${ref.toFixed(1)} bb/100 vs baseline`,
     stats: score ? { ref: score.ref, h2h: score.h2h } : null,
   });
   state.userPresets.push(preset);
@@ -500,7 +504,7 @@ async function startTraining() {
   while (loopOn) await sleep(30);
   state.training = true;
   state.stopTrain = false;
-  state.trainPhase = "학습을 준비하는 중";
+  state.trainPhase = "Preparing training";
   paintControls();
   paintTrain();
   const rng = mulberry32((Math.random() * 0x100000000) >>> 0);
@@ -518,7 +522,7 @@ async function startTraining() {
         rememberGrowth(info.history);
         const a = info.a ? `A ${info.a.ref >= 0 ? "+" : ""}${info.a.ref.toFixed(0)}` : "A …";
         const b = info.b ? `B ${info.b.ref >= 0 ? "+" : ""}${info.b.ref.toFixed(0)}` : "B …";
-        state.trainPhase = `${info.gen}/${info.total}세대 · ${info.phase} · ${a} · ${b} bb/100`;
+        state.trainPhase = `Gen ${info.gen}/${info.total} · ${info.phase} · ${a} · ${b} bb/100`;
         paintTrain();
         paintCharts();
       },
@@ -532,16 +536,16 @@ async function startTraining() {
       state.editorId = state.seats[0].presetId;
       state.draft = { name: state.seats[0].name, params: cloneParams(state.seats[0].params) };
       state.trainPhase = state.stopTrain
-        ? "학습을 멈췄습니다. 확정된 세대는 두 자리에 앉혔습니다."
-        : `${last.gen}세대까지 저장하고 두 자리에 적용했습니다.`;
+        ? "Stopped. Locked generations are seated."
+        : `Saved through generation ${last.gen} and seated both players.`;
       paintEditor();
       paintSeats();
       paintTable();
     } else if (state.stopTrain) {
-      state.trainPhase = "학습을 멈췄습니다. 확정된 세대가 없어 자리는 그대로입니다.";
+      state.trainPhase = "Stopped before a generation was locked. Seats unchanged.";
     }
   } catch (error) {
-    state.trainPhase = error.message || "학습 오류";
+    state.trainPhase = error.message || "Training error";
     console.error(error);
   }
   state.training = false;
@@ -609,7 +613,7 @@ function bind() {
     try {
       await importPresets(event.target.files[0]);
     } catch (error) {
-      state.trainPhase = "가져오기에 실패했습니다. JSON 프리셋 파일인지 확인해 주세요.";
+      state.trainPhase = "Import failed. Use a JSON preset file.";
       paintTrain();
     }
     event.target.value = "";
@@ -617,7 +621,7 @@ function bind() {
   $("btn-train").addEventListener("click", startTraining);
   $("btn-stop").addEventListener("click", () => {
     state.stopTrain = true;
-    state.trainPhase = "이번 후보가 끝나면 멈춥니다.";
+    state.trainPhase = "Stopping after this candidate.";
     paintTrain();
   });
   window.addEventListener("keydown", (event) => {
@@ -629,7 +633,7 @@ function bind() {
   });
   window.addEventListener("resize", paintCharts);
   window.addEventListener("error", (event) => {
-    state.banner = event.message || "오류";
+    state.banner = event.message || "Error";
     paintTable();
   });
 }

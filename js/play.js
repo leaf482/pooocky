@@ -18,7 +18,7 @@ export function playHand(engine, agents, rng, samples = 12) {
     trace.push({ ...engine.apply(seat, action), equity: view.equity });
   }
   if (engine.street !== "complete") {
-    throw new Error(`핸드가 끝나지 않았습니다 (${engine.street})`);
+    throw new Error(`Hand did not finish (${engine.street})`);
   }
   return trace;
 }

@@ -37,7 +37,7 @@ const twoKings = [card("K", 0), card("K", 1), card("Q", 2), card("J", 3), card("
 const flush = [card("A", 0), card("J", 0), card("9", 0), card("7", 0), card("2", 0)];
 const straight = [card("9", 1), card("8", 2), card("7", 3), card("6", 0), card("5", 1)];
 
-assert(handTitle(royal) === "로열 플러시", "로열 플러시 이름");
+assert(handTitle(royal) === "Royal flush", "royal flush name");
 assert(scoreCards(royal) > scoreCards(steelWheel), "로열이 스틸휠보다 셈");
 assert(scoreCards(steelWheel) > scoreCards(quads), "스트레이트 플러시가 포카드보다 셈");
 assert(scoreCards(quads) > scoreCards(acesFull), "포카드가 풀하우스보다 셈");
@@ -45,7 +45,7 @@ assert(scoreCards(acesFull) > scoreCards(kingsFull), "에이스 풀이 킹 풀�
 assert(scoreCards(flush) > scoreCards(straight), "플러시가 스트레이트보다 셈");
 assert(scoreCards(sixHigh) > scoreCards(wheel), "6 스트레이트가 휠보다 셈");
 assert(scoreCards(twoAces) > scoreCards(twoKings), "에이스 페어가 킹 페어보다 셈");
-assert(handTitle(wheel) === "스트레이트", "휠은 스트레이트");
+assert(handTitle(wheel) === "Straight", "wheel is a straight");
 
 const seven = [
   card("A", 1),
@@ -56,7 +56,7 @@ const seven = [
   card("2", 0),
   card("3", 2),
 ];
-assert(handTitle(seven) === "로열 플러시", "7장에서 로열을 고름");
+assert(handTitle(seven) === "Royal flush", "best five of seven is a royal");
 
 function checkDown(seed) {
   const engine = new PokerEngine({ seed, startStack: 1000, sb: 10, bb: 20 });

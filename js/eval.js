@@ -1,13 +1,13 @@
 const CAT_NAMES = [
-  "하이카드",
-  "원페어",
-  "투페어",
-  "트리플",
-  "스트레이트",
-  "플러시",
-  "풀하우스",
-  "포카드",
-  "스트레이트 플러시",
+  "High card",
+  "One pair",
+  "Two pair",
+  "Three of a kind",
+  "Straight",
+  "Flush",
+  "Full house",
+  "Four of a kind",
+  "Straight flush",
 ];
 
 /** Five-card score packed in base 15. Higher is better. */
@@ -187,7 +187,7 @@ export function handTitle(cards) {
   const score = scoreCards(cards);
   if (score < 0) return "—";
   const parts = unpackScore(score);
-  if (parts[0] === 8 && parts[1] === 12) return "로열 플러시";
+  if (parts[0] === 8 && parts[1] === 12) return "Royal flush";
   return CAT_NAMES[parts[0]] || "—";
 }
 
