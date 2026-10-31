@@ -7,25 +7,22 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,680&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600&family=Inter+Tight:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="css/app.css" />
   </head>
   <body>
-    <div class="app">
-      <header class="top">
-        <div class="brand">
-          <p class="mark">POOCKY</p>
-          <h1>두 AI의 홀덤 실험실</h1>
-          <p class="sub">
-            헤즈업 텍사스 홀덤입니다. 두 자리는 에쿼티를 계산한 뒤 베팅을 2수 탐색하는 미니맥스로 두고,
-            학습된 숫자는 프리셋으로 저장해 다시 앉힐 수 있습니다.
-          </p>
-        </div>
-        <dl class="statbar" id="statbar"></dl>
-      </header>
+    <header class="nav">
+      <div class="brand">
+        <p class="mark">POOCKY</p>
+        <p class="sub">두 AI의 홀덤</p>
+      </div>
+      <dl class="statbar" id="statbar"></dl>
+      <button type="button" class="primary" id="btn-run">대국 시작</button>
+    </header>
 
+    <div class="app">
       <section class="stage">
         <div class="felt" id="felt">
           <article class="seat seat-a" id="seat-0"></article>
@@ -39,7 +36,6 @@
 
         <div class="controls">
           <div class="control-row">
-            <button type="button" class="primary" id="btn-run">대국 시작</button>
             <button type="button" id="btn-step">한 수</button>
             <button type="button" id="btn-reset">세션 초기화</button>
             <label class="check"><input type="checkbox" id="reveal" checked /> 핸드 공개</label>

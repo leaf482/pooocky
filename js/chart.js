@@ -14,8 +14,8 @@ export function drawChart(canvas, series, options = {}) {
   const lists = series.map((item) => item.data || []);
   const longest = lists.reduce((n, data) => Math.max(n, data.length), 0);
 
-  ctx.fillStyle = "rgba(243, 236, 223, 0.35)";
-  ctx.font = "12px 'IBM Plex Sans KR', 'Malgun Gothic', sans-serif";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
+  ctx.font = "12px 'Inter Tight', 'IBM Plex Sans KR', sans-serif";
   if (longest < 2) {
     ctx.fillText(options.empty || "아직 데이터가 없습니다", pad.l, pad.t + 18);
     return;
@@ -41,7 +41,7 @@ export function drawChart(canvas, series, options = {}) {
   const yOf = (value) => pad.t + ((max - value) / span) * plotH;
   const xOf = (index, length) => pad.l + (index / (length - 1)) * plotW;
 
-  ctx.strokeStyle = "rgba(243, 236, 223, 0.08)";
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(pad.l, pad.t);
@@ -50,15 +50,15 @@ export function drawChart(canvas, series, options = {}) {
   ctx.stroke();
 
   if (min <= 0 && max >= 0) {
-    ctx.strokeStyle = "rgba(224, 177, 90, 0.35)";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.28)";
     ctx.beginPath();
     ctx.moveTo(pad.l, yOf(0));
     ctx.lineTo(pad.l + plotW, yOf(0));
     ctx.stroke();
   }
 
-  ctx.fillStyle = "rgba(181, 168, 154, 0.9)";
-  ctx.font = "11px 'IBM Plex Sans KR', 'Malgun Gothic', sans-serif";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
+  ctx.font = "11px 'Inter Tight', 'IBM Plex Sans KR', sans-serif";
   ctx.fillText(formatTick(max), 4, pad.t + 10);
   ctx.fillText(formatTick(min), 4, pad.t + plotH);
 
@@ -81,7 +81,7 @@ export function drawChart(canvas, series, options = {}) {
     if (!item.name) return;
     ctx.fillStyle = item.color;
     ctx.fillRect(legendX, height - 12, 10, 3);
-    ctx.fillStyle = "rgba(243, 236, 223, 0.8)";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.72)";
     ctx.fillText(item.name, legendX + 14, height - 8);
     legendX += ctx.measureText(item.name).width + 28;
   });

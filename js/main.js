@@ -161,14 +161,14 @@ function paintControls() {
 }
 
 function paintCharts() {
-  drawChart($("match-chart"), [{ name: "AI A", color: "#e0b15a", data: state.profitSeries }], {
+  drawChart($("match-chart"), [{ name: "AI A", color: "#ffffff", data: state.profitSeries }], {
     empty: "핸드가 쌓이면 누적 bb가 그려집니다",
   });
   drawChart(
     $("growth-chart"),
     [
-      { name: "A", color: "#e0b15a", data: state.growthA },
-      { name: "B", color: "#8fd0c8", data: state.growthB },
+      { name: "A", color: "#ffffff", data: state.growthA },
+      { name: "B", color: "rgba(255,255,255,0.45)", data: state.growthB },
     ],
     { empty: "학습을 시작하면 세대별 실력이 보입니다" },
   );
