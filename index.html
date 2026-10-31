@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>POOCKY — AI 포커</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,680&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/app.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="top">
+        <div class="brand">
+          <p class="mark">POOCKY</p>
+          <h1>두 AI의 홀덤 실험실</h1>
+          <p class="sub">
+            헤즈업 텍사스 홀덤입니다. 두 자리는 에쿼티를 계산한 뒤 베팅을 2수 탐색하는 미니맥스로 두고,
+            학습된 숫자는 프리셋으로 저장해 다시 앉힐 수 있습니다.
+          </p>
+        </div>
+        <dl class="statbar" id="statbar"></dl>
+      </header>
+
+      <section class="stage">
+        <div class="felt" id="felt">
+          <article class="seat seat-a" id="seat-0"></article>
+          <div class="center">
+            <p class="pot" id="pot">팟 —</p>
+            <div class="board" id="board"></div>
+            <p class="banner" id="banner"></p>
+          </div>
+          <article class="seat seat-b" id="seat-1"></article>
+        </div>
+
+        <div class="controls">
+          <div class="control-row">
+            <button type="button" class="primary" id="btn-run">대국 시작</button>
+            <button type="button" id="btn-step">한 수</button>
+            <button type="button" id="btn-reset">세션 초기화</button>
+            <label class="check"><input type="checkbox" id="reveal" checked /> 핸드 공개</label>
+          </div>
+          <div class="speeds" id="speeds" role="group" aria-label="속도">
+            <button type="button" data-speed="step">한 수씩</button>
+            <button type="button" data-speed="slow">느림</button>
+            <button type="button" data-speed="normal" class="on">보통</button>
+            <button type="button" data-speed="fast">빠름</button>
+            <button type="button" data-speed="instant">순간</button>
+          </div>
+        </div>
+
+        <div class="lower">
+          <section class="panel">
+            <h2>진행</h2>
+            <div class="log" id="log" aria-live="polite"></div>
+          </section>
+          <section class="panel chart-panel">
+            <h2>AI A 누적 bb</h2>
+            <canvas id="match-chart" width="320" height="150"></canvas>
+          </section>
+        </div>
+        <p class="fine">
+          스택 2,000 · 스몰 10 · 빅 20 · 상대가 올인으로 칩을 잃으면 그 세션을 끝내고 둘 다 다시 채웁니다.
+          스페이스로 대국을 멈추거나 이어 갑니다.
+        </p>
+      </section>
+
+      <aside class="lab">
+        <section class="panel" id="seat-panel"></section>
+        <section class="panel" id="editor-panel"></section>
+        <section class="panel train">
+          <h2>경쟁 학습</h2>
+          <p class="hint">
+            같은 패를 자리를 바꿔 두 번 두고, 이긴 숫자만 남깁니다. 상대 스타일 쪽으로 조금 이동한 뒤
+            흔들어서 다음 세대를 만듭니다. 곡선은 고정된 미니맥스 기본을 상대로 한 bb/100입니다.
+          </p>
+          <div class="fields">
+            <label>세대 <input id="gen" type="number" min="1" max="24" value="6" /></label>
+            <label>후보 <input id="pop" type="number" min="2" max="5" value="3" /></label>
+            <label>패 쌍 <input id="pairs" type="number" min="8" max="80" value="24" /></label>
+          </div>
+          <div class="control-row">
+            <button type="button" class="primary" id="btn-train">학습 시작</button>
+            <button type="button" id="btn-stop" disabled>학습 중지</button>
+          </div>
+          <p class="status" id="train-status">대기</p>
+          <h3>기준 대비 성장</h3>
+          <canvas id="growth-chart" width="320" height="150"></canvas>
+        </section>
+      </aside>
+    </div>
+    <script type="module" src="js/main.js"></script>
+  </body>
+</html>
