@@ -437,8 +437,32 @@ assert(
   ["tightPre", "tightFlop", "tightTurn", "tightRiver"].some((key) => streetSeen[1][key] !== 0),
   "a stalled ladder mutates street tightness",
 );
-const clamped = cloneParams({ tightRiver: 9 });
+assert(streetSeen[1].openPre === 0 && streetSeen[1].openPost === 0, "street widening leaves the continue range alone");
+const rangeSeen = [];
+await trainLadder({
+  champion: ladderChampion,
+  deadline: 1_000_000,
+  now: () => 0,
+  population: 2,
+  pairs: 8,
+  samples: 1,
+  algorithmFlip: 0,
+  scale: 0.35,
+  widenAfter: 99,
+  rangeAfter: 0,
+  maxSteps: 1,
+  rng: mulberry32(11),
+  measure: (candidate, _champion, seeds) => {
+    rangeSeen.push(candidate.params);
+    return { deals: seeds.map(() => 0), fitness: 0 };
+  },
+});
+assert(rangeSeen[0].openPre === 0 && rangeSeen[0].openPost === 0, "the parent keeps a closed continue range");
+assert(rangeSeen[1].tightRiver === 0, "continue-range widening leaves street tightness alone");
+assert(rangeSeen[1].openPre !== 0 || rangeSeen[1].openPost !== 0, "a longer stall mutates the continue range");
+const clamped = cloneParams({ tightRiver: 9, openPre: 9 });
 assert(clamped.tightRiver === 0.12, "street tightness is clamped");
+assert(clamped.openPre === 3, "continue range is clamped");
 assert(smoked.history.length === 1, "one ladder step records a result");
 assert(smoked.champion.params.tightness <= 0.28 && smoked.champion.params.tightness >= -0.22, "ladder params stay in range");
 
@@ -487,6 +511,10 @@ assert(handContinues(12, 11, []), "suited ace-king continues preflop");
 assert(!handContinues(5, 13, []), "offsuit seven-two folds preflop");
 assert(handContinues(12, 12 + 13, [0, 5 + 13, 7 + 26]), "aces continue on a dry board");
 assert(!handContinues(1 + 39, 2 + 26, [0, 5 + 13, 7 + 13]), "unrelated low cards fold on a dry board");
+assert(handContinues(7, 6, []), "suited nine-eight continues preflop");
+assert(!handContinues(7, 6, [], { openPre: 3 }), "a tighter preflop range folds suited nine-eight");
+assert(handContinues(10, 22, [0, 17, 32]), "queen-jack continues as two overcards");
+assert(!handContinues(10, 22, [0, 17, 32], { openPost: 1 }), "a tighter overcard line folds queen-jack");
 
 if (failed) {
   console.error(`${failed}개 실패`);

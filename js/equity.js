@@ -66,8 +66,13 @@ function hasStraightDraw(cards) {
   return seen[12] === 1 && seen[0] + seen[1] + seen[2] + seen[3] >= 3;
 }
 
+function rankOffset(value) {
+  const n = Math.round(Number(value) || 0);
+  return Math.max(-3, Math.min(3, n));
+}
+
 /** Hands that would still be in the pot: pairs and broadways preflop, made hands, draws, or two overcards later. */
-export function handContinues(holeA, holeB, board) {
+export function handContinues(holeA, holeB, board, gates) {
   let high = holeA % 13;
   let low = holeB % 13;
   const suited = ((holeA / 13) | 0) === ((holeB / 13) | 0);
@@ -76,20 +81,22 @@ export function handContinues(holeA, holeB, board) {
     high = low;
     low = swap;
   }
+  const pre = rankOffset(gates?.openPre);
+  const post = rankOffset(gates?.openPost);
   if (!board.length) {
     if (high === low) return true;
-    if (suited && high >= 8) return true;
-    if (suited && high - low === 1 && high >= 5) return true;
-    if (high === 12 && low >= 8) return true;
-    if (high === 12 && suited && low >= 4) return true;
-    return high >= 10 && low >= 9;
+    if (suited && high >= 8 + pre) return true;
+    if (suited && high - low === 1 && high >= 5 + pre) return true;
+    if (high === 12 && low >= 8 + pre) return true;
+    if (high === 12 && suited && low >= 4 + pre) return true;
+    return high >= 10 + pre && low >= 9 + pre;
   }
   const cards = [holeA, holeB, ...board];
   if (board.length >= 3 && handCategory(cards) >= 1) return true;
   if (hasFlushDraw(cards) || hasStraightDraw(cards)) return true;
   let top = 0;
   for (let i = 0; i < board.length; i++) top = Math.max(top, board[i] % 13);
-  return high > top && low > top && high >= 10;
+  return high > top && low > top && high >= 10 + post;
 }
 
 /**
@@ -97,7 +104,7 @@ export function handContinues(holeA, holeB, board) {
  * Rejected opponent hands are redrawn. If the range is hard to hit, the last
  * samples fall back to whatever hand was drawn.
  */
-export function rangeEquity(hole, board, samples, rng) {
+export function rangeEquity(hole, board, samples, rng, gates) {
   if (!samples || samples < 1) return 0.5;
   const dead = new Uint8Array(52);
   dead[hole[0]] = 1;
@@ -130,7 +137,7 @@ export function rangeEquity(hole, board, samples, rng) {
       remain[j] = tmp;
     }
     const mustTake = tries > cap - (samples - accepted);
-    if (!mustTake && !handContinues(remain[0], remain[1], board)) continue;
+    if (!mustTake && !handContinues(remain[0], remain[1], board, gates)) continue;
     oppFull[0] = remain[0];
     oppFull[1] = remain[1];
     const boardNeed = 5 - board.length;
@@ -147,7 +154,7 @@ export function rangeEquity(hole, board, samples, rng) {
   return accepted ? wins / accepted : 0.5;
 }
 
-export function estimateEquity(algorithm, hole, board, samples, rng) {
-  if (algorithm === "range") return rangeEquity(hole, board, samples, rng);
+export function estimateEquity(algorithm, hole, board, samples, rng, gates) {
+  if (algorithm === "range") return rangeEquity(hole, board, samples, rng, gates);
   return monteCarloEquity(hole, board, samples, rng);
 }

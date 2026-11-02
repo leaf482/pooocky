@@ -12,7 +12,7 @@ export function playHand(engine, agents, rng, samples = 12) {
     const seat = engine.toAct;
     const view = engine.buildView(seat);
     if (!view) break;
-    view.equity = estimateEquity(agents[seat].algorithm, view.hole, view.board, samples, random);
+    view.equity = estimateEquity(agents[seat].algorithm, view.hole, view.board, samples, random, agents[seat].params);
     const params = agents[seat].params;
     const action = decideMinimax(view, params, random);
     trace.push({ ...engine.apply(seat, action), equity: view.equity });
