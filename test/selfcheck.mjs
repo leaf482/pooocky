@@ -229,6 +229,36 @@ randomHands(19, 120, 80);
   assert(calls.type === "call" && folds.type === "fold", `river offset ${calls.type} ${folds.type}`);
 }
 
+{
+  const view = {
+    street: "river",
+    pot: 100,
+    toCall: 0,
+    bb: 20,
+    minRaise: 20,
+    heroStack: 400,
+    oppStack: 400,
+    opponentActsAfterCheck: false,
+    equity: 0.64,
+    legal: [
+      { type: "check", put: 0 },
+      { type: "bet", put: 60, total: 60 },
+      { type: "bet", put: 80, total: 80 },
+    ],
+  };
+  const plain = cloneParams(BASE_PARAMS);
+  plain.noise = 0;
+  plain.tightness = 0;
+  const smaller = cloneParams(plain);
+  smaller.sizeValue = -0.45;
+  const bluffOnly = cloneParams(plain);
+  bluffOnly.sizeBluff = -0.45;
+  const one = decideMinimax(view, plain, mulberry32(4));
+  const value = decideMinimax(view, smaller, mulberry32(4));
+  const bluff = decideMinimax(view, bluffOnly, mulberry32(4));
+  assert(one.put === 80 && value.put === 60 && bluff.put === 80, `bet sizes ${one.put} ${value.put} ${bluff.put}`);
+}
+
 const root = fileURLToPath(new URL("..", import.meta.url));
 assert(resolveStatic(root, "/js/main.js")?.endsWith("main.js"), "serves main.js");
 assert(resolveStatic(root, "/../serve.mjs") === null, "blocks parent path");
@@ -438,6 +468,7 @@ assert(
   "a stalled ladder mutates street tightness",
 );
 assert(streetSeen[1].openPre === 0 && streetSeen[1].openPost === 0, "street widening leaves the continue range alone");
+assert(streetSeen[1].sizeValue === 0 && streetSeen[1].sizeBluff === 0, "street widening leaves bet sizes alone");
 const rangeSeen = [];
 await trainLadder({
   champion: ladderChampion,
@@ -460,9 +491,34 @@ await trainLadder({
 assert(rangeSeen[0].openPre === 0 && rangeSeen[0].openPost === 0, "the parent keeps a closed continue range");
 assert(rangeSeen[1].tightRiver === 0, "continue-range widening leaves street tightness alone");
 assert(rangeSeen[1].openPre !== 0 || rangeSeen[1].openPost !== 0, "a longer stall mutates the continue range");
-const clamped = cloneParams({ tightRiver: 9, openPre: 9 });
+assert(rangeSeen[1].sizeValue === 0 && rangeSeen[1].sizeBluff === 0, "continue-range widening leaves bet sizes alone");
+const betSeen = [];
+await trainLadder({
+  champion: ladderChampion,
+  deadline: 1_000_000,
+  now: () => 0,
+  population: 2,
+  pairs: 8,
+  samples: 1,
+  algorithmFlip: 0,
+  scale: 0.35,
+  widenAfter: 99,
+  rangeAfter: 99,
+  betAfter: 0,
+  maxSteps: 1,
+  rng: mulberry32(13),
+  measure: (candidate, _champion, seeds) => {
+    betSeen.push(candidate.params);
+    return { deals: seeds.map(() => 0), fitness: 0 };
+  },
+});
+assert(betSeen[0].sizeValue === 0 && betSeen[0].sizeBluff === 0, "the parent keeps one bet size");
+assert(betSeen[1].tightRiver === 0 && betSeen[1].openPre === 0, "bet-size widening leaves the earlier genes alone");
+assert(betSeen[1].sizeValue !== 0 || betSeen[1].sizeBluff !== 0, "the longest stall mutates the two bet sizes");
+const clamped = cloneParams({ tightRiver: 9, openPre: 9, sizeValue: 9 });
 assert(clamped.tightRiver === 0.12, "street tightness is clamped");
 assert(clamped.openPre === 3, "continue range is clamped");
+assert(clamped.sizeValue === 0.45, "bet size offset is clamped");
 assert(smoked.history.length === 1, "one ladder step records a result");
 assert(smoked.champion.params.tightness <= 0.28 && smoked.champion.params.tightness >= -0.22, "ladder params stay in range");
 

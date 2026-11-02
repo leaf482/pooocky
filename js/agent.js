@@ -82,6 +82,12 @@ function scoreAction(action, view, equity, params) {
   return ev;
 }
 
+function betTarget(params, equity) {
+  const base = 0.4 + params.betMix * 0.85;
+  const key = equity >= 0.55 ? "sizeValue" : "sizeBluff";
+  return base + (Number(params[key]) || 0);
+}
+
 function sizeDistance(action, target, pot) {
   if (action.type === "fold") return 8;
   if (action.type === "check" || action.type === "call") return 0.62;
@@ -117,7 +123,7 @@ export function decideMinimax(view, params, rng) {
 
   const band = Math.max(0.6, view.pot * 0.012);
   const pool = scored.filter((item) => item.ev >= bestEv - band);
-  const target = 0.4 + params.betMix * 0.85;
+  const target = betTarget(params, equity);
   pool.sort(
     (a, b) =>
       sizeDistance(a.action, target, view.pot) - sizeDistance(b.action, target, view.pot) ||

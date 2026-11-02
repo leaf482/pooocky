@@ -1,5 +1,5 @@
 import { duplicateMatch } from "./play.js";
-import { BASE_PARAMS, RANGE_OPEN_META, STREET_TIGHT_META, cloneParams, mixParams, mutateParams } from "./params.js";
+import { BASE_PARAMS, BET_SIZE_META, RANGE_OPEN_META, STREET_TIGHT_META, cloneParams, mixParams, mutateParams } from "./params.js";
 import { gaussian } from "./rng.js";
 import { leadsByNoise } from "./trainer.js";
 
@@ -108,7 +108,7 @@ function clampScale(value) {
   return Math.max(0.35, Math.min(1.5, value));
 }
 
-function ladderCandidates(champion, population, rng, scale, flip, widen, openRange) {
+function ladderCandidates(champion, population, rng, scale, flip, widen, openRange, splitBets) {
   const list = [{ params: cloneParams(champion.params), algorithm: champion.algorithm }];
   for (let i = 1; i < population; i++) {
     const explore = i % 2 === 0;
@@ -117,6 +117,7 @@ function ladderCandidates(champion, population, rng, scale, flip, widen, openRan
     let params = mutateParams(base, rng, gaussian, factor);
     if (widen) params = mutateParams(params, rng, gaussian, factor, STREET_TIGHT_META);
     if (openRange) params = mutateParams(params, rng, gaussian, factor, RANGE_OPEN_META);
+    if (splitBets) params = mutateParams(params, rng, gaussian, factor, BET_SIZE_META);
     let algorithm = champion.algorithm;
     if (flip > 0 && rng() < flip) algorithm = algorithm === "range" ? "minimax" : "range";
     list.push({ params, algorithm });
@@ -183,6 +184,7 @@ export async function trainLadder(options) {
   const margin = Number.isFinite(options.margin) && options.margin > 0 ? options.margin : 2;
   const widenAfter = Number.isInteger(options.widenAfter) && options.widenAfter >= 0 ? options.widenAfter : 6;
   const rangeAfter = Number.isInteger(options.rangeAfter) && options.rangeAfter >= 0 ? options.rangeAfter : 12;
+  const betAfter = Number.isInteger(options.betAfter) && options.betAfter >= 0 ? options.betAfter : 18;
   const maxSteps = Number.isFinite(options.maxSteps) ? options.maxSteps : Infinity;
   const source = options.champion;
   let scale = clampScale(Number.isFinite(options.scale) ? options.scale : 1);
@@ -225,7 +227,8 @@ export async function trainLadder(options) {
     const frozen = { params: cloneParams(champion.params), algorithm: champion.algorithm };
     const widen = scale <= 0.351 && quietSteps >= widenAfter;
     const openRange = scale <= 0.351 && quietSteps >= rangeAfter;
-    const candidates = ladderCandidates(frozen, population, rng, scale, flip, widen, openRange);
+    const splitBets = scale <= 0.351 && quietSteps >= betAfter;
+    const candidates = ladderCandidates(frozen, population, rng, scale, flip, widen, openRange, splitBets);
     const h2hSeeds = makeSeeds(pairs, rng);
     const refSeeds = makeSeeds(pairs, rng);
     let parent = null;
