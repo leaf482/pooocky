@@ -11,7 +11,7 @@ import {
   normalizePreset,
   saveUserPresets,
 } from "./presets.js";
-import { loadLadder, rankPresets, rememberChampion, saveLadder, trainLadder } from "./ladder.js";
+import { loadLadder, saveLadder } from "./ladder.js";
 import { mulberry32 } from "./rng.js";
 import { trainCompetition } from "./trainer.js";
 
@@ -31,6 +31,7 @@ const state = {
   running: false,
   training: false,
   ladder: false,
+  ladderWorker: null,
   stopTrain: false,
   resetPending: false,
   profitSeries: [],
@@ -694,8 +695,9 @@ async function startTraining() {
   paintCharts();
 }
 
-function persistRun(info, settings) {
+function persistRun(info, settings, extra = {}) {
   const current = state.ladderStore || { hall: [], run: null };
+  if (extra.hall) current.hall = extra.hall;
   current.run = {
     champion: {
       id: info.champion.id || "",
@@ -712,9 +714,35 @@ function persistRun(info, settings) {
     samples: settings.samples,
     hours: settings.hours,
     rngState: info.rngState,
-    lastRerank: current.run?.lastRerank || 0,
+    lastRerank: extra.lastRerank || current.run?.lastRerank || 0,
   };
   state.ladderStore = saveLadder(current);
+  if (extra.hall) paintHall();
+}
+
+function showLadderProgress(info) {
+  const name = info.champion?.name || "Champion";
+  const algo = info.champion?.algorithm === "range" ? "Range" : "Minimax";
+  state.trainPhase = `${formatRemaining(info.deadline)} · ${name} · ${algo} · ${info.promotions} promotion${info.promotions === 1 ? "" : "s"} · ${info.phase}`;
+  paintTrain();
+}
+
+function runLadderWorker(job, onEvent) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL("./ladder-worker.js", import.meta.url), { type: "module" });
+    state.ladderWorker = worker;
+    worker.onmessage = (event) => {
+      const data = event.data;
+      if (!data || typeof data !== "object") return;
+      if (data.type === "done") resolve(data);
+      else if (data.type === "error") reject(new Error(data.message || "Ladder error"));
+      else onEvent(data);
+    };
+    worker.onerror = (event) => {
+      reject(new Error(event.message || "Ladder worker failed"));
+    };
+    worker.postMessage({ type: "start", job });
+  });
 }
 
 async function startLadder(resume) {
@@ -729,91 +757,82 @@ async function startLadder(resume) {
   state.trainPhase = resume ? "Resuming ladder" : "Ranking presets";
   paintControls();
   paintTrain();
-  const rng = mulberry32(saved && Number.isFinite(saved.rngState) ? saved.rngState : (Math.random() * 0x100000000) >>> 0);
+  const pairs = saved ? saved.pairs : readTrainInt("pairs", 24, 8, 80);
+  const population = saved ? saved.population : readTrainInt("pop", 3, 2, 5);
+  const hours = saved ? saved.hours : readTrainInt("hours", 1, 1, 12);
+  const settings = { population, pairs, samples: 4, hours };
+  const startedGeneration = saved?.champion?.generation || 0;
+  let lastSave = 0;
   try {
-    await sleep(0);
-    let champ = saved?.champion || null;
-    const pairs = saved ? saved.pairs : readTrainInt("pairs", 24, 8, 80);
-    const population = saved ? saved.population : readTrainInt("pop", 3, 2, 5);
-    const hours = saved ? saved.hours : readTrainInt("hours", 1, 1, 12);
-    if (!saved) {
-      const ranked = rankPresets(state.presets, { pairs, samples: 4, rng });
-      champ = ranked.champion;
-    }
-    if (state.stopTrain) {
-      state.trainPhase = "Stopped before the ladder started.";
-    } else if (!champ) {
-      state.trainPhase = "No preset to rank.";
-    } else {
-      const settings = { population, pairs, samples: 4, hours };
-      const startedGeneration = champ.generation || 0;
-      let lastSave = 0;
-      const result = await trainLadder({
-        champion: champ,
+    const outcome = await runLadderWorker(
+      {
+        resume: Boolean(saved),
+        presets: state.presets.map((preset) => ({
+          id: preset.id,
+          name: preset.name,
+          algorithm: preset.algorithm,
+          params: preset.params,
+        })),
+        champion: saved?.champion || null,
+        hall: state.ladderStore?.hall || [],
+        lastRerank: saved?.lastRerank || 0,
         hours,
-        deadline: saved ? saved.deadline : undefined,
+        deadline: saved?.deadline,
         scale: saved ? saved.scale : 1,
         promotions: saved ? saved.promotions : 0,
         population,
         pairs,
         samples: 4,
-        rng,
-        shouldStop: () => state.stopTrain,
-        onPromoted: (info) => {
-          const current = state.ladderStore || { hall: [], run: null };
-          current.hall = rememberChampion(current.hall, info.champion);
-          state.ladderStore = current;
-          paintHall();
-          persistRun(info, settings);
-          const due = Date.now() - (state.ladderStore.run?.lastRerank || 0) > 30 * 60 * 1000;
-          if (!due || state.ladderStore.hall.length < 2) return null;
-          state.ladderStore.run.lastRerank = Date.now();
-          const rankedHall = rankPresets(
-            state.ladderStore.hall.map((row, index) => ({ ...row, id: `hall-${index}` })),
-            { pairs, samples: 4, rng },
-          );
-          persistRun(info, settings);
-          const top = rankedHall.champion;
-          if (!top || JSON.stringify(top.params) === JSON.stringify(info.champion.params)) return null;
-          return state.ladderStore.hall.find((row) => JSON.stringify(row.params) === JSON.stringify(top.params)) || top;
-        },
-        onProgress: (info) => {
-          const name = info.champion?.name || "Champion";
-          const algo = info.champion?.algorithm === "range" ? "Range" : "Minimax";
-          state.trainPhase = `${formatRemaining(info.deadline)} · ${name} · ${algo} · ${info.promotions} promotion${info.promotions === 1 ? "" : "s"} · ${info.phase}`;
-          paintTrain();
-          if ((info.phase === "Held" || info.phase === "Promoted") && Date.now() - lastSave > 15000) {
-            lastSave = Date.now();
-            persistRun(info, settings);
-          }
-        },
-      });
-      if (Date.now() >= result.deadline) {
-        state.ladderStore.run = null;
-        state.ladderStore = saveLadder(state.ladderStore);
-      } else {
-        persistRun(
-          {
-            champion: result.champion,
-            scale: result.scale,
-            promotions: result.promotions,
-            deadline: result.deadline,
-            rngState: rng.getState(),
-          },
-          settings,
-        );
-      }
+        rngState: saved && Number.isFinite(saved.rngState) ? saved.rngState : (Math.random() * 0x100000000) >>> 0,
+      },
+      (data) => {
+        if (data.type === "checkpoint") {
+          persistRun(data.info, settings, { hall: data.hall, lastRerank: data.lastRerank });
+          return;
+        }
+        if (data.type !== "progress" || !data.info) return;
+        showLadderProgress(data.info);
+        if ((data.info.phase === "Held" || data.info.phase === "Promoted") && Date.now() - lastSave > 15000) {
+          lastSave = Date.now();
+          persistRun(data.info, settings, { hall: data.hall, lastRerank: data.lastRerank });
+        }
+      },
+    );
+    const result = outcome.result;
+    if (outcome.hall) state.ladderStore.hall = outcome.hall;
+    if (!result?.champion) {
+      state.trainPhase = state.stopTrain ? "Stopped before the ladder started." : "No preset to rank.";
+    } else if (Date.now() >= result.deadline) {
+      state.ladderStore.run = null;
+      state.ladderStore = saveLadder(state.ladderStore);
       if (result.champion.generation > startedGeneration) {
         const seated = seatLadder(result.champion);
-        state.trainPhase = state.stopTrain
-          ? `Stopped. ${seated?.name || "Champion"} is seated. Resume keeps the ladder.`
-          : `Saved ${seated?.name || "Champion"} and seated it.`;
+        state.trainPhase = `Saved ${seated?.name || "Champion"} and seated it.`;
         paintEditor();
         paintSeats();
         paintTable();
-      } else if (Date.now() >= result.deadline) {
+      } else {
         state.trainPhase = `${result.champion.name} held for ${hours}h.`;
-      } else if (state.stopTrain) {
+      }
+    } else {
+      persistRun(
+        {
+          champion: result.champion,
+          scale: result.scale,
+          promotions: result.promotions,
+          deadline: result.deadline,
+          rngState: result.rngState,
+        },
+        settings,
+        { hall: outcome.hall, lastRerank: outcome.lastRerank },
+      );
+      if (result.champion.generation > startedGeneration) {
+        const seated = seatLadder(result.champion);
+        state.trainPhase = `Stopped. ${seated?.name || "Champion"} is seated. Resume keeps the ladder.`;
+        paintEditor();
+        paintSeats();
+        paintTable();
+      } else if (state.stopTrain || outcome.stopped) {
         state.trainPhase = `Stopped. ${result.champion.name} held. Resume keeps the ladder.`;
       }
     }
@@ -821,6 +840,8 @@ async function startLadder(resume) {
     state.trainPhase = error.message || "Ladder error";
     console.error(error);
   }
+  state.ladderWorker?.terminate();
+  state.ladderWorker = null;
   state.training = false;
   state.ladder = false;
   paintControls();
@@ -914,6 +935,7 @@ function bind() {
   });
   $("btn-stop").addEventListener("click", () => {
     state.stopTrain = true;
+    state.ladderWorker?.postMessage({ type: "stop" });
     state.trainPhase = state.ladder ? "Stopping after this step." : "Stopping after this candidate.";
     paintTrain();
   });
