@@ -11,7 +11,7 @@ import {
   normalizePreset,
   saveUserPresets,
 } from "./presets.js";
-import { loadLadder, saveLadder } from "./ladder.js";
+import { formatPace, loadLadder, saveLadder } from "./ladder.js";
 import { mulberry32 } from "./rng.js";
 import { trainCompetition } from "./trainer.js";
 
@@ -785,7 +785,9 @@ function persistRun(info, settings, extra = {}) {
 function showLadderProgress(info) {
   const name = info.champion?.name || "Champion";
   const algo = info.champion?.algorithm === "range" ? "Range" : "Minimax";
-  state.trainPhase = `${formatRemaining(info.deadline)} · ${name} · ${algo} · ${info.promotions} promotion${info.promotions === 1 ? "" : "s"} · ${info.phase}`;
+  const pace = formatPace(info.step, Date.now() - (state.ladderStartedAt || Date.now()));
+  const paceBit = pace ? ` · ${pace}` : "";
+  state.trainPhase = `${formatRemaining(info.deadline)} · ${name} · ${algo} · ${info.promotions} promotion${info.promotions === 1 ? "" : "s"}${paceBit} · ${info.phase}`;
   paintTrain();
 }
 
@@ -815,6 +817,7 @@ async function startLadder(resume) {
   while (loopOn) await sleep(30);
   state.training = true;
   state.ladder = true;
+  state.ladderStartedAt = Date.now();
   state.stopTrain = false;
   state.trainPhase = resume ? "Resuming ladder" : "Ranking presets";
   paintControls();

@@ -108,6 +108,16 @@ function clampScale(value) {
   return Math.max(0.35, Math.min(1.5, value));
 }
 
+/** Steps per hour once a minute of the run has elapsed. */
+export function formatPace(steps, elapsedMs) {
+  if (!Number.isFinite(steps) || steps < 1) return "";
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 60_000) return "";
+  const rate = steps / (elapsedMs / 3_600_000);
+  if (!Number.isFinite(rate) || rate <= 0) return "";
+  const text = rate >= 100 ? String(Math.round(rate)) : rate.toFixed(1);
+  return `${text} steps/h`;
+}
+
 function ladderCandidates(champion, population, rng, scale, flip, widen, openRange, splitBets) {
   const list = [{ params: cloneParams(champion.params), algorithm: champion.algorithm }];
   for (let i = 1; i < population; i++) {
