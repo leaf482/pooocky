@@ -3,7 +3,7 @@ import { drawChart } from "./chart.js";
 import { PokerEngine, streetLabel } from "./engine.js";
 import { decideMinimax } from "./agent.js";
 import { estimateEquity } from "./equity.js";
-import { PARAM_KEYS, PARAM_META, RANGE_OPEN_META, STREET_TIGHT_META, cloneParams } from "./params.js";
+import { BET_SIZE_META, PARAM_KEYS, PARAM_META, RANGE_OPEN_META, STREET_TIGHT_META, cloneParams } from "./params.js";
 import {
   allPresets,
   loadUserPresets,
@@ -56,7 +56,11 @@ function presetById(id) {
 }
 
 function sameParams(a, b) {
-  const keys = PARAM_KEYS.concat(STREET_TIGHT_META.map((meta) => meta.key), RANGE_OPEN_META.map((meta) => meta.key));
+  const keys = PARAM_KEYS.concat(
+    STREET_TIGHT_META.map((meta) => meta.key),
+    RANGE_OPEN_META.map((meta) => meta.key),
+    BET_SIZE_META.map((meta) => meta.key),
+  );
   return keys.every((key) => Math.abs((a[key] || 0) - (b[key] || 0)) < 0.001);
 }
 
@@ -255,6 +259,7 @@ function paintSeats() {
             <p class="spec">${bits}</p>
             ${streetLine(current.params)}
             ${continueLine(current.params)}
+            ${betLine(current.params)}
           </div>`;
       })
       .join("")}
@@ -292,6 +297,18 @@ function continueLine(params) {
   return `<p class="spec opens">${bits}</p>`;
 }
 
+function betLine(params) {
+  const rows = [
+    ["Value", "sizeValue"],
+    ["Bluff", "sizeBluff"],
+  ];
+  if (rows.every(([, key]) => Math.abs(Number(params?.[key]) || 0) < 0.005)) return "";
+  const bits = rows
+    .map(([label, key]) => `<span><i>${label}</i><b>${Number(params[key] || 0).toFixed(2)}</b></span>`)
+    .join("");
+  return `<p class="spec opens">${bits}</p>`;
+}
+
 function sliderHTML(meta) {
   const value = state.draft.params[meta.key];
   return `
@@ -315,6 +332,7 @@ function paintEditor() {
   const sliders = PARAM_META.map(sliderHTML).join("");
   const streetSliders = STREET_TIGHT_META.map(sliderHTML).join("");
   const rangeSliders = RANGE_OPEN_META.map(sliderHTML).join("");
+  const betSliders = BET_SIZE_META.map(sliderHTML).join("");
   $("editor-panel").innerHTML = `
     <h2>Presets</h2>
     <p class="hint">${esc(selected?.blurb || "Tune the numbers, then seat the result.")}</p>
@@ -331,6 +349,8 @@ function paintEditor() {
     ${streetSliders}
     <p class="algo-tag">Continue range</p>
     ${rangeSliders}
+    <p class="algo-tag">Bet sizes</p>
+    ${betSliders}
     <div class="actions">
       <button type="button" data-act="apply" data-seat="0">Seat A</button>
       <button type="button" data-act="apply" data-seat="1">Seat B</button>

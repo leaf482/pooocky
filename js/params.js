@@ -105,7 +105,26 @@ export const RANGE_OPEN_META = [
   },
 ];
 
-const ALL_META = [...PARAM_META, ...STREET_TIGHT_META, ...RANGE_OPEN_META];
+export const BET_SIZE_META = [
+  {
+    key: "sizeValue",
+    label: "Value size",
+    min: -0.45,
+    max: 0.45,
+    step: 0.01,
+    hint: "Added to the bet-size target when the hand is strong. 0 keeps one size.",
+  },
+  {
+    key: "sizeBluff",
+    label: "Bluff size",
+    min: -0.45,
+    max: 0.45,
+    step: 0.01,
+    hint: "Added to the bet-size target when the hand is weak. 0 keeps one size.",
+  },
+];
+
+const ALL_META = [...PARAM_META, ...STREET_TIGHT_META, ...RANGE_OPEN_META, ...BET_SIZE_META];
 const ALL_KEYS = ALL_META.map((meta) => meta.key);
 
 export const BASE_PARAMS = Object.freeze({
@@ -121,6 +140,8 @@ export const BASE_PARAMS = Object.freeze({
   tightRiver: 0,
   openPre: 0,
   openPost: 0,
+  sizeValue: 0,
+  sizeBluff: 0,
 });
 
 export const TIGHT_PARAMS = Object.freeze({
