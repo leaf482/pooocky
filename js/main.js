@@ -3,7 +3,7 @@ import { drawChart } from "./chart.js";
 import { PokerEngine, streetLabel } from "./engine.js";
 import { decideMinimax } from "./agent.js";
 import { estimateEquity } from "./equity.js";
-import { PARAM_KEYS, PARAM_META, STREET_TIGHT_META, cloneParams } from "./params.js";
+import { PARAM_KEYS, PARAM_META, RANGE_OPEN_META, STREET_TIGHT_META, cloneParams } from "./params.js";
 import {
   allPresets,
   loadUserPresets,
@@ -56,7 +56,7 @@ function presetById(id) {
 }
 
 function sameParams(a, b) {
-  const keys = PARAM_KEYS.concat(STREET_TIGHT_META.map((meta) => meta.key));
+  const keys = PARAM_KEYS.concat(STREET_TIGHT_META.map((meta) => meta.key), RANGE_OPEN_META.map((meta) => meta.key));
   return keys.every((key) => Math.abs((a[key] || 0) - (b[key] || 0)) < 0.001);
 }
 
@@ -254,6 +254,7 @@ function paintSeats() {
             <p class="algo-tag">${current.algorithm === "range" ? "Range" : "Minimax"}</p>
             <p class="spec">${bits}</p>
             ${streetLine(current.params)}
+            ${continueLine(current.params)}
           </div>`;
       })
       .join("")}
@@ -274,13 +275,30 @@ function streetLine(params) {
   return `<p class="spec streets">${bits}</p>`;
 }
 
+function sliderText(meta, value) {
+  const n = Number(value) || 0;
+  return meta.step >= 1 ? String(Math.round(n)) : n.toFixed(2);
+}
+
+function continueLine(params) {
+  const rows = [
+    ["Preflop", "openPre"],
+    ["Overcards", "openPost"],
+  ];
+  if (rows.every(([, key]) => Math.round(Number(params?.[key]) || 0) === 0)) return "";
+  const bits = rows
+    .map(([label, key]) => `<span><i>${label}</i><b>${Math.round(Number(params[key]) || 0)}</b></span>`)
+    .join("");
+  return `<p class="spec opens">${bits}</p>`;
+}
+
 function sliderHTML(meta) {
   const value = state.draft.params[meta.key];
   return `
     <label class="slider">
       <span>${meta.label}</span>
       <input type="range" min="${meta.min}" max="${meta.max}" step="${meta.step}" value="${value}" data-param="${meta.key}" aria-label="${meta.label}" />
-      <span data-val="${meta.key}">${Number(value).toFixed(2)}</span>
+      <span data-val="${meta.key}">${sliderText(meta, value)}</span>
     </label>`;
 }
 
@@ -296,6 +314,7 @@ function paintEditor() {
     .join("");
   const sliders = PARAM_META.map(sliderHTML).join("");
   const streetSliders = STREET_TIGHT_META.map(sliderHTML).join("");
+  const rangeSliders = RANGE_OPEN_META.map(sliderHTML).join("");
   $("editor-panel").innerHTML = `
     <h2>Presets</h2>
     <p class="hint">${esc(selected?.blurb || "Tune the numbers, then seat the result.")}</p>
@@ -310,6 +329,8 @@ function paintEditor() {
     ${sliders}
     <p class="algo-tag">Street tightness</p>
     ${streetSliders}
+    <p class="algo-tag">Continue range</p>
+    ${rangeSliders}
     <div class="actions">
       <button type="button" data-act="apply" data-seat="0">Seat A</button>
       <button type="button" data-act="apply" data-seat="1">Seat B</button>
@@ -365,7 +386,7 @@ function playOneAction() {
   if (!view) return;
   const streetBefore = engine.street;
   const samples = state.speed === "instant" ? 8 : 16;
-  view.equity = estimateEquity(state.seats[seat].algorithm, view.hole, view.board, samples, engine.rng);
+    view.equity = estimateEquity(state.seats[seat].algorithm, view.hole, view.board, samples, engine.rng, state.seats[seat].params);
   const action = decideMinimax(view, state.seats[seat].params, engine.rng);
   const rec = engine.apply(seat, action);
   const bubble = (rec.text || "").replace(/^AI [AB]\s/, "");
@@ -904,7 +925,8 @@ function bind() {
     if (!key) return;
     state.draft.params[key] = Number(event.target.value);
     const label = event.target.parentElement.querySelector(`[data-val="${key}"]`);
-    if (label) label.textContent = Number(event.target.value).toFixed(2);
+    const step = Number(event.target.step) || 0.01;
+    if (label) label.textContent = step >= 1 ? String(Math.round(Number(event.target.value))) : Number(event.target.value).toFixed(2);
   });
   $("editor-panel").addEventListener("click", async (event) => {
     const button = event.target.closest("[data-act]");

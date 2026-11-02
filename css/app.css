@@ -464,6 +464,7 @@ canvas { width: 100%; height: 140px; display: block; }
 }
 
 .spec.streets { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.spec.opens { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 .spec span {
   display: flex;

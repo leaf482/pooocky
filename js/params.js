@@ -86,7 +86,26 @@ export const STREET_TIGHT_META = [
   },
 ];
 
-const ALL_META = [...PARAM_META, ...STREET_TIGHT_META];
+export const RANGE_OPEN_META = [
+  {
+    key: "openPre",
+    label: "Preflop open",
+    min: -3,
+    max: 3,
+    step: 1,
+    hint: "Shifts every preflop continue rank. 0 keeps the built-in range.",
+  },
+  {
+    key: "openPost",
+    label: "Overcards",
+    min: -3,
+    max: 3,
+    step: 1,
+    hint: "Shifts the two-overcard rank. 0 keeps queens and better.",
+  },
+];
+
+const ALL_META = [...PARAM_META, ...STREET_TIGHT_META, ...RANGE_OPEN_META];
 const ALL_KEYS = ALL_META.map((meta) => meta.key);
 
 export const BASE_PARAMS = Object.freeze({
@@ -100,6 +119,8 @@ export const BASE_PARAMS = Object.freeze({
   tightFlop: 0,
   tightTurn: 0,
   tightRiver: 0,
+  openPre: 0,
+  openPost: 0,
 });
 
 export const TIGHT_PARAMS = Object.freeze({
