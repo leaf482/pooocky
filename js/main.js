@@ -2,7 +2,7 @@ import { cardParts } from "./cards.js";
 import { drawChart } from "./chart.js";
 import { PokerEngine, streetLabel } from "./engine.js";
 import { decideMinimax } from "./agent.js";
-import { monteCarloEquity } from "./equity.js";
+import { estimateEquity } from "./equity.js";
 import { PARAM_KEYS, PARAM_META, cloneParams } from "./params.js";
 import {
   allPresets,
@@ -22,8 +22,8 @@ const state = {
   editorId: "minimax-base",
   draft: null,
   seats: [
-    { presetId: "minimax-base", name: "Baseline", params: null },
-    { presetId: "minimax-tight", name: "Tight", params: null },
+    { presetId: "minimax-base", name: "Baseline", params: null, algorithm: "minimax" },
+    { presetId: "minimax-tight", name: "Tight", params: null, algorithm: "minimax" },
   ],
   reveal: true,
   speed: "normal",
@@ -62,6 +62,7 @@ state.seats[1].params = cloneParams(presetById("minimax-tight").params);
 state.draft = {
   name: "Baseline",
   params: cloneParams(state.seats[0].params),
+  algorithm: "minimax",
 };
 
 const $ = (id) => document.getElementById(id);
@@ -136,7 +137,7 @@ function paintTable() {
       </div>
       <div class="holes">${holeHTML}</div>
       <div class="bubble">${esc(state.bubbles[seat] || "")}</div>
-      <div class="eq">${eq == null ? "" : `${Math.round(eq * 100)}% vs random`}</div>
+      <div class="eq">${eq == null ? "" : `${Math.round(eq * 100)}% vs ${state.seats[seat].algorithm === "range" ? "range" : "random"}`}</div>
     `;
   }
   const board = engine.board || [];
@@ -219,7 +220,7 @@ function paintSeats() {
         const letter = seat === 0 ? "A" : "B";
         const current = state.seats[seat];
         const known = presetById(current.presetId);
-        const custom = !known || !sameParams(known.params, current.params);
+        const custom = !known || !sameParams(known.params, current.params) || known.algorithm !== current.algorithm;
         const seated = custom ? `${current.name} · edited` : current.name;
         const bits = styleBits(current.params)
           .map(([label, value]) => `<span><i>${label}</i><b>${value}</b></span>`)
@@ -231,6 +232,7 @@ function paintSeats() {
               ${custom ? `<option value="" selected>${esc(seated)}</option>` : ""}
               ${options(custom ? "" : current.presetId)}
             </select>
+            <p class="algo-tag">${current.algorithm === "range" ? "Range" : "Minimax"}</p>
             <p class="spec">${bits}</p>
           </div>`;
       })
@@ -262,6 +264,12 @@ function paintEditor() {
     <p class="hint">${esc(selected?.blurb || "Tune the numbers, then seat the result.")}</p>
     <div class="list">${rows}</div>
     <input id="preset-name" maxlength="32" value="${esc(state.draft.name)}" aria-label="Preset name" />
+    <label class="algo">Algorithm
+      <select id="draft-algo" aria-label="Algorithm">
+        <option value="minimax"${state.draft.algorithm === "range" ? "" : " selected"}>Minimax</option>
+        <option value="range"${state.draft.algorithm === "range" ? " selected" : ""}>Range</option>
+      </select>
+    </label>
     ${sliders}
     <div class="actions">
       <button type="button" data-act="apply" data-seat="0">Seat A</button>
@@ -318,7 +326,7 @@ function playOneAction() {
   if (!view) return;
   const streetBefore = engine.street;
   const samples = state.speed === "instant" ? 8 : 16;
-  view.equity = monteCarloEquity(view.hole, view.board, samples, engine.rng);
+  view.equity = estimateEquity(state.seats[seat].algorithm, view.hole, view.board, samples, engine.rng);
   const action = decideMinimax(view, state.seats[seat].params, engine.rng);
   const rec = engine.apply(seat, action);
   const bubble = (rec.text || "").replace(/^AI [AB]\s/, "");
@@ -426,6 +434,7 @@ function applyPresetToSeat(seat, id) {
     presetId: preset.id,
     name: preset.name,
     params: cloneParams(preset.params),
+    algorithm: preset.algorithm === "range" ? "range" : "minimax",
   };
   return true;
 }
@@ -433,15 +442,23 @@ function applyPresetToSeat(seat, id) {
 function readDraftFromInputs() {
   const name = $("preset-name");
   if (name) state.draft.name = name.value.trim().slice(0, 32) || "Unnamed preset";
+  const algo = $("draft-algo");
+  if (algo) state.draft.algorithm = algo.value === "range" ? "range" : "minimax";
 }
 
 function applyDraft(seat) {
   readDraftFromInputs();
-  const matched = state.presets.find((preset) => sameParams(preset.params, state.draft.params) && preset.name === state.draft.name);
+  const matched = state.presets.find(
+    (preset) =>
+      sameParams(preset.params, state.draft.params) &&
+      preset.name === state.draft.name &&
+      preset.algorithm === state.draft.algorithm,
+  );
   state.seats[seat] = {
     presetId: matched ? matched.id : "",
     name: state.draft.name,
     params: cloneParams(state.draft.params),
+    algorithm: state.draft.algorithm === "range" ? "range" : "minimax",
   };
   paintSeats();
   paintTable();
@@ -452,8 +469,9 @@ function saveDraft() {
   const preset = normalizePreset({
     name: state.draft.name,
     params: state.draft.params,
+    algorithm: state.draft.algorithm,
     origin: "user",
-    blurb: "Hand-tuned minimax parameters.",
+    blurb: state.draft.algorithm === "range" ? "Hand-tuned range search." : "Hand-tuned minimax parameters.",
   });
   if (!preset) return;
   state.userPresets.push(preset);
@@ -471,7 +489,7 @@ function deleteSelected() {
   state.userPresets = saveUserPresets(state.userPresets);
   refreshPresets();
   state.editorId = "minimax-base";
-  state.draft = { name: "Baseline", params: cloneParams(presetById("minimax-base").params) };
+  state.draft = { name: "Baseline", params: cloneParams(presetById("minimax-base").params), algorithm: "minimax" };
   paintEditor();
   paintSeats();
 }
@@ -503,6 +521,7 @@ async function importPresets(file) {
     const preset = normalizePreset({
       name: raw.name,
       params: raw.params,
+      algorithm: raw.algorithm,
       blurb: raw.blurb,
       origin: raw.origin,
       generation: raw.generation,
@@ -519,7 +538,7 @@ async function importPresets(file) {
   const last = state.userPresets[state.userPresets.length - 1];
   if (last) {
     state.editorId = last.id;
-    state.draft = { name: last.name, params: cloneParams(last.params) };
+    state.draft = { name: last.name, params: cloneParams(last.params), algorithm: last.algorithm };
   }
   paintEditor();
   paintSeats();
@@ -533,18 +552,20 @@ function rememberGrowth(history) {
 }
 
 function adoptTrained(side, params, score, gen) {
+  const seat = side === "A" ? 0 : 1;
   const ref = score && Number.isFinite(score.ref) ? score.ref : null;
+  const algorithm = state.seats[seat].algorithm === "range" ? "range" : "minimax";
   const preset = normalizePreset({
     name: `${side} gen ${gen}`,
     params,
+    algorithm,
     origin: "train",
     generation: gen,
-    blurb: ref == null ? "Trained minimax parameters." : `${ref >= 0 ? "+" : ""}${ref.toFixed(1)} bb/100 vs baseline`,
+    blurb: ref == null ? "Trained parameters." : `${ref >= 0 ? "+" : ""}${ref.toFixed(1)} bb/100 vs baseline`,
     stats: score ? { ref: score.ref, h2h: score.h2h } : null,
   });
   state.userPresets.push(preset);
-  const seat = side === "A" ? 0 : 1;
-  state.seats[seat] = { presetId: preset.id, name: preset.name, params: cloneParams(params) };
+  state.seats[seat] = { presetId: preset.id, name: preset.name, params: cloneParams(params), algorithm };
   return preset;
 }
 
@@ -574,6 +595,8 @@ async function startTraining() {
       population: readTrainInt("pop", 3, 2, 5),
       pairs: readTrainInt("pairs", 24, 8, 80),
       samples: 6,
+      algorithmA: state.seats[0].algorithm,
+      algorithmB: state.seats[1].algorithm,
       rng,
       shouldStop: () => state.stopTrain,
       onProgress: (info) => {
@@ -592,7 +615,11 @@ async function startTraining() {
       state.userPresets = saveUserPresets(state.userPresets);
       refreshPresets();
       state.editorId = state.seats[0].presetId;
-      state.draft = { name: state.seats[0].name, params: cloneParams(state.seats[0].params) };
+      state.draft = {
+        name: state.seats[0].name,
+        params: cloneParams(state.seats[0].params),
+        algorithm: state.seats[0].algorithm,
+      };
       state.trainPhase = state.stopTrain
         ? "Stopped. Locked generations are seated."
         : `Saved through generation ${last.gen} and seated both players.`;
@@ -656,7 +683,7 @@ function bind() {
       const preset = presetById(button.dataset.id);
       if (!preset) return;
       state.editorId = preset.id;
-      state.draft = { name: preset.name, params: cloneParams(preset.params) };
+      state.draft = { name: preset.name, params: cloneParams(preset.params), algorithm: preset.algorithm };
       paintEditor();
     } else if (act === "apply") {
       applyDraft(Number(button.dataset.seat));
@@ -671,6 +698,10 @@ function bind() {
     }
   });
   $("editor-panel").addEventListener("change", async (event) => {
+    if (event.target.id === "draft-algo") {
+      state.draft.algorithm = event.target.value === "range" ? "range" : "minimax";
+      return;
+    }
     if (event.target.id !== "import-file" || !event.target.files[0]) return;
     try {
       await importPresets(event.target.files[0]);

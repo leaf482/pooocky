@@ -25,9 +25,9 @@ function seedBb(chips, bb = 20) {
   return (chips / bb / 2) * 100;
 }
 
-function measure(params, rival, h2hSeeds, refSeeds, samples) {
-  const h2h = duplicateMatch(params, rival, h2hSeeds.length, samples, null, 20, h2hSeeds);
-  const ref = duplicateMatch(params, BASE_PARAMS, refSeeds.length, samples, null, 20, refSeeds);
+function measure(params, rival, h2hSeeds, refSeeds, samples, algorithm = "minimax", rivalAlgorithm = "minimax") {
+  const h2h = duplicateMatch(params, rival, h2hSeeds.length, samples, null, 20, h2hSeeds, algorithm, rivalAlgorithm);
+  const ref = duplicateMatch(params, BASE_PARAMS, refSeeds.length, samples, null, 20, refSeeds, algorithm, "minimax");
   const n = Math.min(h2h.perSeed.length, ref.perSeed.length);
   const deals = [];
   for (let i = 0; i < n; i++) deals.push(0.55 * seedBb(h2h.perSeed[i]) + 0.45 * seedBb(ref.perSeed[i]));
@@ -77,6 +77,8 @@ export async function trainCompetition(options) {
   const pairs = options.pairs;
   const samples = options.samples;
   const rng = options.rng;
+  const algorithmA = options.algorithmA === "range" ? "range" : "minimax";
+  const algorithmB = options.algorithmB === "range" ? "range" : "minimax";
   const onProgress = options.onProgress || (() => {});
   const shouldStop = options.shouldStop || (() => false);
 
@@ -97,7 +99,7 @@ export async function trainCompetition(options) {
     });
   }
 
-  async function confirmPick(label, gen, best, parent, rival, count, otherScore) {
+  async function confirmPick(label, gen, best, parent, rival, count, otherScore, algorithm, rivalAlgorithm) {
     if (!best?.score || !parent?.score) {
       return { params: parent?.params || best?.params, score: best?.score || null, scaleMul: 1 };
     }
@@ -109,8 +111,8 @@ export async function trainCompetition(options) {
     if (shouldStop()) return { params: best.params, score: best.score, scaleMul: 1 };
     const freshH2h = makeSeeds(count, rng);
     const freshRef = makeSeeds(count, rng);
-    const againParent = measure(parent.params, rival, freshH2h, freshRef, samples);
-    const againChild = measure(best.params, rival, freshH2h, freshRef, samples);
+    const againParent = measure(parent.params, rival, freshH2h, freshRef, samples, algorithm, rivalAlgorithm);
+    const againChild = measure(best.params, rival, freshH2h, freshRef, samples, algorithm, rivalAlgorithm);
     if (leadsByNoise(againChild.deals, againParent.deals)) {
       return { params: best.params, score: best.score, scaleMul: 1.15 };
     }
@@ -123,10 +125,10 @@ export async function trainCompetition(options) {
     const refSeeds = makeSeeds(pairs, rng);
 
     if (gen === 0) {
-      const scoreA = measure(a, b, h2hSeeds, refSeeds, samples);
+      const scoreA = measure(a, b, h2hSeeds, refSeeds, samples, algorithmA, algorithmB);
       await yieldNow();
       if (shouldStop()) break;
-      const scoreB = measure(b, a, h2hSeeds, refSeeds, samples);
+      const scoreB = measure(b, a, h2hSeeds, refSeeds, samples, algorithmB, algorithmA);
       history.push({
         gen,
         a: publish(scoreA),
@@ -150,7 +152,7 @@ export async function trainCompetition(options) {
     let bestA = null;
     for (let i = 0; i < candA.length; i++) {
       if (shouldStop()) break;
-      const score = measure(candA[i], frozenB, h2hSeeds, refSeeds, samples);
+      const score = measure(candA[i], frozenB, h2hSeeds, refSeeds, samples, algorithmA, algorithmB);
       if (i === 0) {
         parentA = { params: candA[0], score, fitness: score.fitness, index: 0 };
         bestA = parentA;
@@ -166,7 +168,7 @@ export async function trainCompetition(options) {
     let bestB = null;
     for (let i = 0; i < candB.length; i++) {
       if (shouldStop()) break;
-      const score = measure(candB[i], frozenA, h2hSeeds, refSeeds, samples);
+      const score = measure(candB[i], frozenA, h2hSeeds, refSeeds, samples, algorithmB, algorithmA);
       if (i === 0) {
         parentB = { params: candB[0], score, fitness: score.fitness, index: 0 };
         bestB = parentB;
@@ -181,8 +183,8 @@ export async function trainCompetition(options) {
     if (shouldStop() && (!bestA?.score || !bestB?.score)) break;
 
     const confirmCount = Math.max(8, Math.min(pairs, Math.round(pairs * 0.5)));
-    const decidedA = await confirmPick("A", gen, bestA, parentA, frozenB, confirmCount, () => shownB);
-    const decidedB = await confirmPick("B", gen, bestB, parentB, frozenA, confirmCount, () => decidedA.score);
+    const decidedA = await confirmPick("A", gen, bestA, parentA, frozenB, confirmCount, () => shownB, algorithmA, algorithmB);
+    const decidedB = await confirmPick("B", gen, bestB, parentB, frozenA, confirmCount, () => decidedA.score, algorithmB, algorithmA);
     scaleA = clampScale(scaleA * decidedA.scaleMul);
     scaleB = clampScale(scaleB * decidedB.scaleMul);
     a = decidedA.params;

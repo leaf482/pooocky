@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { handTitle, scoreCards } from "../js/eval.js";
 import { PokerEngine } from "../js/engine.js";
 import { decideMinimax } from "../js/agent.js";
+import { handContinues } from "../js/equity.js";
 import { duplicateMatch, oneHand, playHand } from "../js/play.js";
 import { BASE_PARAMS, TIGHT_PARAMS, cloneParams } from "../js/params.js";
 import { normalizePreset } from "../js/presets.js";
@@ -239,6 +240,12 @@ const trained = await trainCompetition({
 });
 assert(trained.history.length >= 1 && trained.history[0].gen === 0, "training keeps the opening generation");
 assert(trained.paramsA.tightness <= 0.28 && trained.paramsA.tightness >= -0.22, "trained tightness stays in range");
+
+assert(handContinues(12, 12 + 13, []), "pocket aces continue preflop");
+assert(handContinues(12, 11, []), "suited ace-king continues preflop");
+assert(!handContinues(5, 13, []), "offsuit seven-two folds preflop");
+assert(handContinues(12, 12 + 13, [0, 5 + 13, 7 + 26]), "aces continue on a dry board");
+assert(!handContinues(1 + 39, 2 + 26, [0, 5 + 13, 7 + 13]), "unrelated low cards fold on a dry board");
 
 if (failed) {
   console.error(`${failed}개 실패`);

@@ -1,5 +1,5 @@
 import { decideMinimax } from "./agent.js";
-import { monteCarloEquity } from "./equity.js";
+import { estimateEquity } from "./equity.js";
 import { PokerEngine } from "./engine.js";
 import { rngFrom } from "./rng.js";
 
@@ -12,7 +12,7 @@ export function playHand(engine, agents, rng, samples = 12) {
     const seat = engine.toAct;
     const view = engine.buildView(seat);
     if (!view) break;
-    view.equity = monteCarloEquity(view.hole, view.board, samples, random);
+    view.equity = estimateEquity(agents[seat].algorithm, view.hole, view.board, samples, random);
     const params = agents[seat].params;
     const action = decideMinimax(view, params, random);
     trace.push({ ...engine.apply(seat, action), equity: view.equity });
@@ -23,7 +23,7 @@ export function playHand(engine, agents, rng, samples = 12) {
   return trace;
 }
 
-export function oneHand(paramsA, paramsB, seed, button = 0, samples = 8) {
+export function oneHand(paramsA, paramsB, seed, button = 0, samples = 8, algorithmA = "minimax", algorithmB = "minimax") {
   const rng = rngFrom(seed >>> 0);
   const engine = new PokerEngine({
     rng,
@@ -32,17 +32,37 @@ export function oneHand(paramsA, paramsB, seed, button = 0, samples = 8) {
     sb: 10,
     bb: 20,
   });
-  playHand(engine, [{ params: paramsA }, { params: paramsB }], rng, samples);
+  playHand(
+    engine,
+    [
+      { params: paramsA, algorithm: algorithmA },
+      { params: paramsB, algorithm: algorithmB },
+    ],
+    rng,
+    samples,
+  );
   return engine.profit[0];
 }
 
-export function duplicateMatch(paramsA, paramsB, pairs, samples, rng, bb = 20, fixedSeeds = null) {
+export function duplicateMatch(
+  paramsA,
+  paramsB,
+  pairs,
+  samples,
+  rng,
+  bb = 20,
+  fixedSeeds = null,
+  algorithmA = "minimax",
+  algorithmB = "minimax",
+) {
   const seeds = fixedSeeds || Array.from({ length: pairs }, () => (rng() * 0x100000000) >>> 0);
   const perSeed = [];
   let profit = 0;
   for (let i = 0; i < seeds.length; i++) {
     const button = i & 1;
-    const delta = oneHand(paramsA, paramsB, seeds[i], button, samples) - oneHand(paramsB, paramsA, seeds[i], button, samples);
+    const delta =
+      oneHand(paramsA, paramsB, seeds[i], button, samples, algorithmA, algorithmB) -
+      oneHand(paramsB, paramsA, seeds[i], button, samples, algorithmB, algorithmA);
     perSeed.push(delta);
     profit += delta;
   }

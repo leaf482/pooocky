@@ -28,6 +28,14 @@ export function builtinPresets() {
       blurb: "Wider calls, more bluffs, and larger bet sizes.",
       params: cloneParams(LOOSE_PARAMS),
     },
+    {
+      id: "range-base",
+      name: "Range",
+      algorithm: "range",
+      builtin: true,
+      blurb: "Same two-ply bets, but equity is taken against hands that would still be in the pot.",
+      params: cloneParams(BASE_PARAMS),
+    },
   ];
 }
 
@@ -80,7 +88,7 @@ export function normalizePreset(raw) {
   return {
     id: cleanId(raw.id),
     name: cleanText(raw.name, "Imported preset", 32),
-    algorithm: "minimax",
+    algorithm: raw.algorithm === "range" ? "range" : "minimax",
     builtin: false,
     blurb: cleanText(raw.blurb, "Saved minimax parameters.", 140),
     params: sanitizeParams(raw.params),
