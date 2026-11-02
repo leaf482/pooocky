@@ -8,7 +8,7 @@ import { BASE_PARAMS, TIGHT_PARAMS, cloneParams } from "../js/params.js";
 import { normalizePreset } from "../js/presets.js";
 import { mulberry32 } from "../js/rng.js";
 import { resolveStatic } from "../serve.mjs";
-import { rankPresets, trainLadder } from "../js/ladder.js";
+import { normalizeLadder, rankPresets, rememberChampion, trainLadder } from "../js/ladder.js";
 import { leadsByNoise, trainCompetition } from "../js/trainer.js";
 
 let failed = 0;
@@ -226,6 +226,9 @@ const zeros = [0, 0, 0, 0, 0, 0, 0, 0];
 assert(leadsByNoise(zeros.map(() => 20), zeros), "steady lead replaces the parent");
 assert(!leadsByNoise([400, -10, -10, -10, -10, -10, -10, -10], zeros), "one lucky deal keeps the parent");
 assert(!leadsByNoise(zeros, zeros), "a tie keeps the parent");
+const mildLead = [3, 3, 3, 3, -1, -1, -1, -1];
+assert(leadsByNoise(mildLead, zeros), "a small lead clears one standard error");
+assert(!leadsByNoise(mildLead, zeros, 2), "a small lead stays inside two standard errors");
 const paired = duplicateMatch(BASE_PARAMS, TIGHT_PARAMS, 2, 1, mulberry32(1));
 assert(paired.perSeed.length === 2, "match keeps one result per deal");
 assert(Math.abs(paired.perSeed.reduce((sum, n) => sum + n, 0) - paired.profit) < 1e-6, "deal results sum to profit");
@@ -337,7 +340,7 @@ const promoted = await trainLadder({
   measure: scriptedMeasure("promote"),
 });
 assert(promoted.promotions === 1 && promoted.history.length === 1, "a confirmed lead promotes once");
-assert(promoted.champion.generation === 1 && promoted.scale > 1, "a promotion widens the next mutation");
+assert(promoted.champion.generation === 1 && promoted.scale === 1, "a promotion keeps the mutation width");
 assert(promoted.champion.algorithm === "minimax", "flip rate zero keeps the algorithm");
 assert(JSON.stringify(promoted.champion.params) !== JSON.stringify(ladderChampion.params), "a promotion changes parameters");
 
@@ -368,6 +371,46 @@ const smoked = await trainLadder({
 });
 assert(smoked.history.length === 1, "one ladder step records a result");
 assert(smoked.champion.params.tightness <= 0.28 && smoked.champion.params.tightness >= -0.22, "ladder params stay in range");
+
+const stream = mulberry32(7);
+stream();
+const mark = stream.getState();
+const upcoming = stream();
+assert(mulberry32(mark)() === upcoming, "rng resumes from its saved state");
+
+let hall = [];
+for (let i = 0; i < 10; i++) hall = rememberChampion(hall, { name: `C${i}`, params: BASE_PARAMS, generation: i });
+assert(hall.length === 8 && hall[0].generation === 2 && hall[7].generation === 9, "hall keeps the newest eight");
+
+const expired = normalizeLadder(
+  {
+    hall: [{ name: "A\nbad", algorithm: "range", params: BASE_PARAMS, generation: 2 }],
+    run: { champion: { name: "A", params: BASE_PARAMS }, deadline: 1, scale: 9 },
+  },
+  10,
+);
+assert(expired.run === null && expired.hall[0].name === "Abad" && expired.hall[0].algorithm === "range", "expired runs drop and names are cleaned");
+const live = normalizeLadder(
+  {
+    hall: [],
+    run: {
+      champion: { name: "Tight", algorithm: "nope", params: { tightness: 99 }, generation: 4 },
+      deadline: 50,
+      scale: 0.1,
+      promotions: 4,
+      rngState: 12,
+      population: 9,
+      pairs: 3,
+      samples: 99,
+      hours: 0,
+    },
+  },
+  20,
+);
+assert(live.run.deadline === 50 && live.run.scale === 0.35, "a live run keeps its deadline and clamps scale");
+assert(live.run.champion.params.tightness === 0.28 && live.run.champion.algorithm === "minimax", "a saved champion is clamped");
+assert(live.run.population === 5 && live.run.pairs === 8 && live.run.samples === 8 && live.run.hours === 1, "saved ladder settings are clamped");
+assert(live.run.rngState === 12, "saved rng state is kept");
 
 assert(handContinues(12, 12 + 13, []), "pocket aces continue preflop");
 assert(handContinues(12, 11, []), "suited ace-king continues preflop");

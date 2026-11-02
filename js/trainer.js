@@ -39,8 +39,8 @@ function measure(params, rival, h2hSeeds, refSeeds, samples, algorithm = "minima
   };
 }
 
-/** Child must beat the parent by more than the paired sample's own noise. */
-export function leadsByNoise(childDeals, parentDeals) {
+/** Child must beat the parent by more than `margin` standard errors of the paired sample. */
+export function leadsByNoise(childDeals, parentDeals, margin = 1) {
   if (!childDeals || !parentDeals) return false;
   const n = Math.min(childDeals.length, parentDeals.length);
   if (n < 4) return false;
@@ -54,7 +54,8 @@ export function leadsByNoise(childDeals, parentDeals) {
   const mean = sum / n;
   const variance = Math.max(0, sum2 / (n - 1) - (mean * mean * n) / (n - 1));
   const se = Math.sqrt(variance / n);
-  return mean > se;
+  const need = Number.isFinite(margin) && margin > 0 ? margin : 1;
+  return mean > se * need;
 }
 
 function publish(score) {

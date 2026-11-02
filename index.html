@@ -83,9 +83,14 @@
           <div class="actions">
             <button type="button" class="primary" id="btn-train">Train</button>
             <button type="button" id="btn-ladder">Ladder</button>
+            <button type="button" id="btn-resume" hidden>Resume</button>
             <button type="button" id="btn-stop" disabled>Stop</button>
           </div>
           <p class="status" id="train-status">Idle</p>
+          <div id="hall-wrap" hidden>
+            <h3>Hall of fame</h3>
+            <div id="hall" class="hall"></div>
+          </div>
           <h3>Versus baseline</h3>
           <canvas id="growth-chart" width="320" height="150"></canvas>
         </section>
