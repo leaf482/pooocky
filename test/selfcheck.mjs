@@ -8,6 +8,7 @@ import { BASE_PARAMS, TIGHT_PARAMS, cloneParams } from "../js/params.js";
 import { normalizePreset } from "../js/presets.js";
 import { mulberry32 } from "../js/rng.js";
 import { resolveStatic } from "../serve.mjs";
+import { rankPresets } from "../js/ladder.js";
 import { leadsByNoise, trainCompetition } from "../js/trainer.js";
 
 let failed = 0;
@@ -240,6 +241,50 @@ const trained = await trainCompetition({
 });
 assert(trained.history.length >= 1 && trained.history[0].gen === 0, "training keeps the opening generation");
 assert(trained.paramsA.tightness <= 0.28 && trained.paramsA.tightness >= -0.22, "trained tightness stays in range");
+
+let rankThrew = false;
+try {
+  rankPresets([{ params: BASE_PARAMS }]);
+} catch {
+  rankThrew = true;
+}
+assert(rankThrew, "ranking requires a shared deal pack");
+
+const emptyRank = rankPresets([], { seeds: [1], samples: 1 });
+assert(emptyRank.champion === null && emptyRank.rows.length === 0, "empty field has no champion");
+
+const only = { id: "only", name: "Only", params: cloneParams(BASE_PARAMS) };
+const solo = rankPresets([only], { seeds: [1], samples: 1 });
+solo.champion.params.tightness = 0.2;
+assert(solo.champion.id === "only" && solo.champion.mean === 0, "one preset is the champion");
+assert(only.params.tightness === BASE_PARAMS.tightness, "champion params are a copy");
+
+const twins = rankPresets(
+  [
+    { id: "first", name: "First", params: BASE_PARAMS },
+    { id: "second", name: "Second", params: BASE_PARAMS },
+  ],
+  { seeds: [1, 2, 3, 4], samples: 1 },
+);
+assert(twins.champion.id === "first", "equal presets keep the earlier one");
+assert(twins.rows.every((row) => row.mean === 0), "equal presets score zero");
+
+const field = [
+  { id: "minimax-base", name: "Baseline", algorithm: "minimax", params: BASE_PARAMS },
+  { id: "minimax-tight", name: "Tight", algorithm: "minimax", params: TIGHT_PARAMS },
+];
+const ranked = rankPresets(field, { samples: 1, seeds: [11, 12, 13, 14] });
+const replay = rankPresets(field, { samples: 1, seeds: [11, 12, 13, 14] });
+assert(ranked.rows.length === 2 && ranked.seeds.length === 4, "ranking keeps both presets and the deal pack");
+assert(Math.abs(ranked.rows[0].mean + ranked.rows[1].mean) < 1e-6, "ranking is zero-sum");
+assert(replay.champion.id === ranked.champion.id && replay.champion.mean === ranked.champion.mean, "same deals, same rank");
+assert(ranked.champion.params.tightness === field.find((preset) => preset.id === ranked.champion.id).params.tightness, "champion keeps its parameters");
+
+const rangeOnly = rankPresets(
+  [{ id: "range-base", name: "Range", algorithm: "range", params: BASE_PARAMS }],
+  { seeds: [1], samples: 1 },
+);
+assert(rangeOnly.champion.algorithm === "range", "champion keeps its algorithm");
 
 assert(handContinues(12, 12 + 13, []), "pocket aces continue preflop");
 assert(handContinues(12, 11, []), "suited ace-king continues preflop");
