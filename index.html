@@ -72,14 +72,17 @@
           <p class="hint">
             Candidates replay the same deals. A child replaces its parent only when the lead beats the noise, then again on fresh deals.
             The curve is bb/100 against frozen Baseline.
+            Ladder ranks the saved presets, freezes the winner, and mutates a copy until Hours runs out.
           </p>
           <div class="fields">
             <label>Gens <input id="gen" type="number" min="1" max="24" value="6" /></label>
             <label>Pop <input id="pop" type="number" min="2" max="5" value="3" /></label>
             <label>Deals <input id="pairs" type="number" min="8" max="80" value="24" /></label>
+            <label>Hours <input id="hours" type="number" min="1" max="12" value="1" /></label>
           </div>
           <div class="actions">
             <button type="button" class="primary" id="btn-train">Train</button>
+            <button type="button" id="btn-ladder">Ladder</button>
             <button type="button" id="btn-stop" disabled>Stop</button>
           </div>
           <p class="status" id="train-status">Idle</p>

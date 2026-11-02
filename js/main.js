@@ -11,6 +11,7 @@ import {
   normalizePreset,
   saveUserPresets,
 } from "./presets.js";
+import { rankPresets, trainLadder } from "./ladder.js";
 import { mulberry32 } from "./rng.js";
 import { trainCompetition } from "./trainer.js";
 
@@ -29,6 +30,7 @@ const state = {
   speed: "normal",
   running: false,
   training: false,
+  ladder: false,
   stopTrain: false,
   resetPending: false,
   profitSeries: [],
@@ -164,6 +166,7 @@ function paintControls() {
   $("btn-step").disabled = state.running || state.training;
   $("btn-reset").disabled = state.training;
   $("btn-train").disabled = state.training;
+  $("btn-ladder").disabled = state.training;
   $("btn-stop").disabled = !state.training;
   for (const button of $("speeds").querySelectorAll("button")) {
     button.classList.toggle("on", button.dataset.speed === state.speed);
@@ -569,6 +572,44 @@ function adoptTrained(side, params, score, gen) {
   return preset;
 }
 
+function formatRemaining(deadline) {
+  const ms = Math.max(0, deadline - Date.now());
+  const total = Math.ceil(ms / 60000);
+  const hours = Math.floor(total / 60);
+  const mins = total % 60;
+  if (hours > 0) return `${hours}h ${mins}m left`;
+  return `${mins}m left`;
+}
+
+function seatLadder(champion) {
+  const preset = normalizePreset({
+    name: `${champion.name} ladder ${champion.generation}`,
+    params: champion.params,
+    algorithm: champion.algorithm,
+    origin: "train",
+    generation: champion.generation,
+    blurb: `Ladder champion after ${champion.generation} confirmed promotion${champion.generation === 1 ? "" : "s"}.`,
+  });
+  if (!preset) return null;
+  state.userPresets.push(preset);
+  state.userPresets = saveUserPresets(state.userPresets);
+  refreshPresets();
+  const saved = state.userPresets.find((item) => item.id === preset.id) || preset;
+  state.seats[0] = {
+    presetId: saved.id,
+    name: saved.name,
+    params: cloneParams(champion.params),
+    algorithm: saved.algorithm === "range" ? "range" : "minimax",
+  };
+  state.editorId = saved.id;
+  state.draft = {
+    name: saved.name,
+    params: cloneParams(champion.params),
+    algorithm: state.seats[0].algorithm,
+  };
+  return saved;
+}
+
 function readTrainInt(id, fallback, min, max) {
   const raw = String($(id)?.value ?? "").trim();
   if (!raw) return fallback;
@@ -637,6 +678,67 @@ async function startTraining() {
   paintControls();
   paintTrain();
   paintCharts();
+}
+
+async function startLadder() {
+  if (state.training) return;
+  state.running = false;
+  while (loopOn) await sleep(30);
+  state.training = true;
+  state.ladder = true;
+  state.stopTrain = false;
+  state.trainPhase = "Ranking presets";
+  paintControls();
+  paintTrain();
+  const rng = mulberry32((Math.random() * 0x100000000) >>> 0);
+  try {
+    await sleep(0);
+    const pairs = readTrainInt("pairs", 24, 8, 80);
+    const ranked = rankPresets(state.presets, { pairs, samples: 4, rng });
+    const champ = ranked.champion;
+    if (state.stopTrain) {
+      state.trainPhase = "Stopped before the ladder started.";
+    } else if (!champ) {
+      state.trainPhase = "No preset to rank.";
+    } else {
+      const hours = readTrainInt("hours", 1, 1, 12);
+      const result = await trainLadder({
+        champion: champ,
+        hours,
+        population: readTrainInt("pop", 3, 2, 5),
+        pairs,
+        samples: 4,
+        rng,
+        shouldStop: () => state.stopTrain,
+        onProgress: (info) => {
+          const name = info.champion?.name || "Champion";
+          const algo = info.champion?.algorithm === "range" ? "Range" : "Minimax";
+          state.trainPhase = `${formatRemaining(info.deadline)} · ${name} · ${algo} · ${info.promotions} promotion${info.promotions === 1 ? "" : "s"} · ${info.phase}`;
+          paintTrain();
+        },
+      });
+      if (result.promotions > 0) {
+        const saved = seatLadder(result.champion);
+        state.trainPhase = state.stopTrain
+          ? `Stopped. ${saved?.name || "Champion"} is seated.`
+          : `Saved ${saved?.name || "Champion"} and seated it.`;
+        paintEditor();
+        paintSeats();
+        paintTable();
+      } else if (state.stopTrain) {
+        state.trainPhase = `Stopped. ${result.champion.name} held.`;
+      } else {
+        state.trainPhase = `${result.champion.name} held for ${hours}h.`;
+      }
+    }
+  } catch (error) {
+    state.trainPhase = error.message || "Ladder error";
+    console.error(error);
+  }
+  state.training = false;
+  state.ladder = false;
+  paintControls();
+  paintTrain();
 }
 
 function bind() {
@@ -712,9 +814,10 @@ function bind() {
     event.target.value = "";
   });
   $("btn-train").addEventListener("click", startTraining);
+  $("btn-ladder").addEventListener("click", startLadder);
   $("btn-stop").addEventListener("click", () => {
     state.stopTrain = true;
-    state.trainPhase = "Stopping after this candidate.";
+    state.trainPhase = state.ladder ? "Stopping after this step." : "Stopping after this candidate.";
     paintTrain();
   });
   window.addEventListener("keydown", (event) => {
