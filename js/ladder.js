@@ -157,9 +157,10 @@ function defaultMeasure(candidate, champion, h2hSeeds, refSeeds, samples) {
 
 /**
  * Evolve one copy against a frozen champion until the deadline.
- * A child takes the seat only when its lead beats the sample noise and
- * the same lead shows up again on fresh deals. The score is mostly
- * paired bb/100 against the champion, with a small Baseline anchor.
+ * A child takes the seat only when its lead clears two standard errors
+ * and the same lead shows up on a fresh pack. A promotion keeps the
+ * mutation width. The score is mostly paired bb/100 against the champion,
+ * with a small Baseline anchor.
  */
 export async function trainLadder(options) {
   if (!options?.champion?.params) throw new Error("trainLadder needs a champion");
@@ -175,10 +176,10 @@ export async function trainLadder(options) {
   const pairs = options.pairs || 24;
   const samples = options.samples ?? 4;
   const flip = Number.isFinite(options.algorithmFlip) ? options.algorithmFlip : 0.15;
+  const margin = Number.isFinite(options.margin) && options.margin > 0 ? options.margin : 2;
   const maxSteps = Number.isFinite(options.maxSteps) ? options.maxSteps : Infinity;
   const source = options.champion;
-  let scale = 1;
-  let promotions = 0;
+  let scale = clampScale(Number.isFinite(options.scale) ? options.scale : 1);
   let champion = {
     id: source.id ?? "",
     name: source.name ?? "Champion",
@@ -186,6 +187,8 @@ export async function trainLadder(options) {
     params: cloneParams(source.params),
     generation: Number.isInteger(source.generation) && source.generation >= 0 ? source.generation : 0,
   };
+  let promotions =
+    Number.isInteger(options.promotions) && options.promotions >= 0 ? options.promotions : champion.generation;
   const history = [];
   let step = 0;
 
@@ -197,6 +200,7 @@ export async function trainLadder(options) {
       scale,
       fitness: fitness ?? null,
       deadline,
+      rngState: typeof rng.getState === "function" ? rng.getState() : null,
       champion: {
         id: champion.id,
         name: champion.name,
@@ -227,7 +231,7 @@ export async function trainLadder(options) {
       if (i === 0) {
         parent = { seat: candidates[0], score, index: 0 };
         best = parent;
-      } else if (parent && leadsByNoise(score.deals, parent.score.deals) && score.fitness > best.score.fitness) {
+      } else if (parent && leadsByNoise(score.deals, parent.score.deals, margin) && score.fitness > best.score.fitness) {
         best = { seat: candidates[i], score, index: i };
       }
       report(`Screening ${i + 1}/${candidates.length}`, best?.score?.fitness);
@@ -240,13 +244,13 @@ export async function trainLadder(options) {
       report("Confirming", best.score.fitness);
       await yieldNow();
       if (shouldStop()) break;
-      const confirmCount = Math.max(8, Math.min(pairs, Math.round(pairs * 0.5)));
+      const confirmCount = Math.max(pairs, 16);
       const freshH2h = makeSeeds(confirmCount, rng);
       const freshRef = makeSeeds(confirmCount, rng);
       const againParent = await Promise.resolve(measure(parent.seat, frozen, freshH2h, freshRef, samples));
       if (shouldStop()) break;
       const againChild = await Promise.resolve(measure(best.seat, frozen, freshH2h, freshRef, samples));
-      if (leadsByNoise(againChild.deals, againParent.deals)) {
+      if (leadsByNoise(againChild.deals, againParent.deals, margin)) {
         champion = {
           ...champion,
           algorithm: best.seat.algorithm,
@@ -254,8 +258,31 @@ export async function trainLadder(options) {
           generation: champion.generation + 1,
         };
         promotions += 1;
-        scale = clampScale(scale * 1.15);
         promoted = true;
+        if (options.onPromoted) {
+          try {
+            const next = await Promise.resolve(
+              options.onPromoted({
+                champion,
+                scale,
+                promotions,
+                deadline,
+                rngState: typeof rng.getState === "function" ? rng.getState() : null,
+              }),
+            );
+            if (next?.params) {
+              champion = {
+                id: next.id ?? champion.id,
+                name: next.name || champion.name,
+                algorithm: algorithmOf(next),
+                params: cloneParams(next.params),
+                generation: Number.isInteger(next.generation) && next.generation >= 0 ? next.generation : champion.generation,
+              };
+            }
+          } catch (error) {
+            console.error(error);
+          }
+        }
       } else {
         scale = clampScale(scale * 0.85);
       }
@@ -274,5 +301,106 @@ export async function trainLadder(options) {
     await yieldNow();
   }
 
-  return { champion, promotions, scale, history };
+  return { champion, promotions, scale, history, deadline };
+}
+
+export const LADDER_KEY = "pooocky.ladder.v1";
+
+function ladderStorage() {
+  try {
+    if (typeof localStorage === "undefined") return null;
+    return localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function cleanName(value) {
+  const text = String(value ?? "")
+    .replace(/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 32);
+  return text || "Champion";
+}
+
+function cleanGeneration(value) {
+  return Number.isInteger(value) && value >= 0 && value <= 9999 ? value : 0;
+}
+
+function cleanChampion(raw) {
+  if (!raw?.params) return null;
+  return {
+    id: typeof raw.id === "string" ? raw.id.slice(0, 40) : "",
+    name: cleanName(raw.name),
+    algorithm: algorithmOf(raw),
+    params: cloneParams(raw.params),
+    generation: cleanGeneration(raw.generation),
+  };
+}
+
+/** Keep the newest eight champions and a run that still has time left. */
+export function normalizeLadder(raw, now = Date.now()) {
+  const hall = [];
+  const source = Array.isArray(raw?.hall) ? raw.hall : [];
+  for (const row of source) {
+    const champion = cleanChampion(row);
+    if (champion) hall.push(champion);
+  }
+  const kept = hall.slice(-8);
+  const runSource = raw?.run;
+  const champion = cleanChampion(runSource?.champion);
+  const deadline = Number(runSource?.deadline);
+  if (!champion || !Number.isFinite(deadline) || !(deadline > now)) {
+    return { hall: kept, run: null, lastRerank: 0 };
+  }
+  const scale = Number(runSource.scale);
+  const population = Math.round(Number(runSource.population));
+  const pairs = Math.round(Number(runSource.pairs));
+  const samples = Math.round(Number(runSource.samples));
+  const hours = Math.round(Number(runSource.hours));
+  const rngState = Number(runSource.rngState);
+  const lastRerank = Number(runSource.lastRerank);
+  return {
+    hall: kept,
+    lastRerank: Number.isFinite(lastRerank) && lastRerank > 0 ? lastRerank : 0,
+    run: {
+      champion,
+      scale: clampScale(Number.isFinite(scale) ? scale : 1),
+      promotions: cleanGeneration(runSource.promotions),
+      deadline,
+      population: Math.max(2, Math.min(5, Number.isFinite(population) ? population : 3)),
+      pairs: Math.max(8, Math.min(80, Number.isFinite(pairs) ? pairs : 24)),
+      samples: Math.max(1, Math.min(8, Number.isFinite(samples) ? samples : 4)),
+      hours: Math.max(1, Math.min(12, Number.isFinite(hours) ? hours : 1)),
+      rngState: Number.isFinite(rngState) ? rngState >>> 0 : null,
+      lastRerank: Number.isFinite(lastRerank) && lastRerank > 0 ? lastRerank : 0,
+    },
+  };
+}
+
+export function rememberChampion(hall, champion) {
+  return normalizeLadder({ hall: [...(Array.isArray(hall) ? hall : []), champion] }, Number.POSITIVE_INFINITY).hall;
+}
+
+export function loadLadder(now = Date.now()) {
+  const store = ladderStorage();
+  if (!store) return normalizeLadder(null, now);
+  try {
+    return normalizeLadder(JSON.parse(store.getItem(LADDER_KEY) || "null"), now);
+  } catch {
+    return normalizeLadder(null, now);
+  }
+}
+
+export function saveLadder(data, now = Date.now()) {
+  const clean = normalizeLadder(data, now);
+  const store = ladderStorage();
+  if (!store) return clean;
+  try {
+    store.setItem(LADDER_KEY, JSON.stringify({ version: 1, hall: clean.hall, run: clean.run }));
+  } catch {
+    return clean;
+  }
+  return clean;
 }

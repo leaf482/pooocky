@@ -11,7 +11,7 @@ import {
   normalizePreset,
   saveUserPresets,
 } from "./presets.js";
-import { rankPresets, trainLadder } from "./ladder.js";
+import { loadLadder, rankPresets, rememberChampion, saveLadder, trainLadder } from "./ladder.js";
 import { mulberry32 } from "./rng.js";
 import { trainCompetition } from "./trainer.js";
 
@@ -167,6 +167,8 @@ function paintControls() {
   $("btn-reset").disabled = state.training;
   $("btn-train").disabled = state.training;
   $("btn-ladder").disabled = state.training;
+  $("btn-resume").hidden = state.training || !state.ladderStore?.run;
+  $("btn-resume").disabled = state.training;
   $("btn-stop").disabled = !state.training;
   for (const button of $("speeds").querySelectorAll("button")) {
     button.classList.toggle("on", button.dataset.speed === state.speed);
@@ -189,6 +191,18 @@ function paintCharts() {
 
 function paintTrain() {
   $("train-status").textContent = state.trainPhase;
+}
+
+function paintHall() {
+  const wrap = $("hall-wrap");
+  const hall = state.ladderStore?.hall || [];
+  wrap.hidden = hall.length === 0;
+  $("hall").innerHTML = hall
+    .map(
+      (row, index) =>
+        `<button type="button" class="row" data-hall="${index}">${esc(row.name)} · gen ${row.generation}</button>`,
+    )
+    .join("");
 }
 
 function styleBits(params) {
@@ -680,55 +694,127 @@ async function startTraining() {
   paintCharts();
 }
 
-async function startLadder() {
+function persistRun(info, settings) {
+  const current = state.ladderStore || { hall: [], run: null };
+  current.run = {
+    champion: {
+      id: info.champion.id || "",
+      name: info.champion.name,
+      algorithm: info.champion.algorithm,
+      params: cloneParams(info.champion.params),
+      generation: info.champion.generation,
+    },
+    scale: info.scale,
+    promotions: info.promotions,
+    deadline: info.deadline,
+    population: settings.population,
+    pairs: settings.pairs,
+    samples: settings.samples,
+    hours: settings.hours,
+    rngState: info.rngState,
+    lastRerank: current.run?.lastRerank || 0,
+  };
+  state.ladderStore = saveLadder(current);
+}
+
+async function startLadder(resume) {
   if (state.training) return;
+  const saved = resume ? state.ladderStore?.run : null;
+  if (resume && !saved) return;
   state.running = false;
   while (loopOn) await sleep(30);
   state.training = true;
   state.ladder = true;
   state.stopTrain = false;
-  state.trainPhase = "Ranking presets";
+  state.trainPhase = resume ? "Resuming ladder" : "Ranking presets";
   paintControls();
   paintTrain();
-  const rng = mulberry32((Math.random() * 0x100000000) >>> 0);
+  const rng = mulberry32(saved && Number.isFinite(saved.rngState) ? saved.rngState : (Math.random() * 0x100000000) >>> 0);
   try {
     await sleep(0);
-    const pairs = readTrainInt("pairs", 24, 8, 80);
-    const ranked = rankPresets(state.presets, { pairs, samples: 4, rng });
-    const champ = ranked.champion;
+    let champ = saved?.champion || null;
+    const pairs = saved ? saved.pairs : readTrainInt("pairs", 24, 8, 80);
+    const population = saved ? saved.population : readTrainInt("pop", 3, 2, 5);
+    const hours = saved ? saved.hours : readTrainInt("hours", 1, 1, 12);
+    if (!saved) {
+      const ranked = rankPresets(state.presets, { pairs, samples: 4, rng });
+      champ = ranked.champion;
+    }
     if (state.stopTrain) {
       state.trainPhase = "Stopped before the ladder started.";
     } else if (!champ) {
       state.trainPhase = "No preset to rank.";
     } else {
-      const hours = readTrainInt("hours", 1, 1, 12);
+      const settings = { population, pairs, samples: 4, hours };
+      const startedGeneration = champ.generation || 0;
+      let lastSave = 0;
       const result = await trainLadder({
         champion: champ,
         hours,
-        population: readTrainInt("pop", 3, 2, 5),
+        deadline: saved ? saved.deadline : undefined,
+        scale: saved ? saved.scale : 1,
+        promotions: saved ? saved.promotions : 0,
+        population,
         pairs,
         samples: 4,
         rng,
         shouldStop: () => state.stopTrain,
+        onPromoted: (info) => {
+          const current = state.ladderStore || { hall: [], run: null };
+          current.hall = rememberChampion(current.hall, info.champion);
+          state.ladderStore = current;
+          paintHall();
+          persistRun(info, settings);
+          const due = Date.now() - (state.ladderStore.run?.lastRerank || 0) > 30 * 60 * 1000;
+          if (!due || state.ladderStore.hall.length < 2) return null;
+          state.ladderStore.run.lastRerank = Date.now();
+          const rankedHall = rankPresets(
+            state.ladderStore.hall.map((row, index) => ({ ...row, id: `hall-${index}` })),
+            { pairs, samples: 4, rng },
+          );
+          persistRun(info, settings);
+          const top = rankedHall.champion;
+          if (!top || JSON.stringify(top.params) === JSON.stringify(info.champion.params)) return null;
+          return state.ladderStore.hall.find((row) => JSON.stringify(row.params) === JSON.stringify(top.params)) || top;
+        },
         onProgress: (info) => {
           const name = info.champion?.name || "Champion";
           const algo = info.champion?.algorithm === "range" ? "Range" : "Minimax";
           state.trainPhase = `${formatRemaining(info.deadline)} · ${name} · ${algo} · ${info.promotions} promotion${info.promotions === 1 ? "" : "s"} · ${info.phase}`;
           paintTrain();
+          if ((info.phase === "Held" || info.phase === "Promoted") && Date.now() - lastSave > 15000) {
+            lastSave = Date.now();
+            persistRun(info, settings);
+          }
         },
       });
-      if (result.promotions > 0) {
-        const saved = seatLadder(result.champion);
+      if (Date.now() >= result.deadline) {
+        state.ladderStore.run = null;
+        state.ladderStore = saveLadder(state.ladderStore);
+      } else {
+        persistRun(
+          {
+            champion: result.champion,
+            scale: result.scale,
+            promotions: result.promotions,
+            deadline: result.deadline,
+            rngState: rng.getState(),
+          },
+          settings,
+        );
+      }
+      if (result.champion.generation > startedGeneration) {
+        const seated = seatLadder(result.champion);
         state.trainPhase = state.stopTrain
-          ? `Stopped. ${saved?.name || "Champion"} is seated.`
-          : `Saved ${saved?.name || "Champion"} and seated it.`;
+          ? `Stopped. ${seated?.name || "Champion"} is seated. Resume keeps the ladder.`
+          : `Saved ${seated?.name || "Champion"} and seated it.`;
         paintEditor();
         paintSeats();
         paintTable();
-      } else if (state.stopTrain) {
-        state.trainPhase = `Stopped. ${result.champion.name} held.`;
-      } else {
+      } else if (Date.now() >= result.deadline) {
         state.trainPhase = `${result.champion.name} held for ${hours}h.`;
+      } else if (state.stopTrain) {
+        state.trainPhase = `Stopped. ${result.champion.name} held. Resume keeps the ladder.`;
       }
     }
   } catch (error) {
@@ -738,6 +824,7 @@ async function startLadder() {
   state.training = false;
   state.ladder = false;
   paintControls();
+  paintHall();
   paintTrain();
 }
 
@@ -814,7 +901,17 @@ function bind() {
     event.target.value = "";
   });
   $("btn-train").addEventListener("click", startTraining);
-  $("btn-ladder").addEventListener("click", startLadder);
+  $("btn-ladder").addEventListener("click", () => startLadder(false));
+  $("btn-resume").addEventListener("click", () => startLadder(true));
+  $("hall").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-hall]");
+    if (!button) return;
+    const row = state.ladderStore?.hall?.[Number(button.dataset.hall)];
+    if (!row) return;
+    state.editorId = "";
+    state.draft = { name: row.name, params: cloneParams(row.params), algorithm: row.algorithm };
+    paintEditor();
+  });
   $("btn-stop").addEventListener("click", () => {
     state.stopTrain = true;
     state.trainPhase = state.ladder ? "Stopping after this step." : "Stopping after this candidate.";
@@ -836,8 +933,14 @@ function bind() {
   });
 }
 
+state.ladderStore = loadLadder();
+if (state.ladderStore.run) {
+  const run = state.ladderStore.run;
+  state.trainPhase = `Paused · ${run.champion.name} · ${formatRemaining(run.deadline)} · Resume keeps this champion.`;
+}
 bind();
 paintSeats();
 paintEditor();
+paintHall();
 paintTrain();
 paintAll();
