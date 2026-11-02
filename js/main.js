@@ -103,9 +103,10 @@ function hiddenCards() {
 }
 
 function paintStats() {
-  const sessions = engine.sessionWins[0] + engine.sessionWins[1];
+  const live = engine.street !== "idle" && engine.street !== "complete";
+  const hands = engine.handsPlayed + (live ? 1 : 0);
   const items = [
-    ["Hands", engine.handsPlayed.toLocaleString("en-US")],
+    ["Hands", hands.toLocaleString("en-US")],
     ["AI A", `${signedBb(engine.profit[0])} bb`],
     ["AI B", `${signedBb(engine.profit[1])} bb`],
     ["Sessions", `${engine.sessionWins[0]}–${engine.sessionWins[1]}`],
@@ -113,9 +114,6 @@ function paintStats() {
   $("statbar").innerHTML = items
     .map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`)
     .join("");
-  if (!sessions && engine.handsPlayed === 0) {
-    $("statbar").querySelectorAll("dd")[3].textContent = "0–0";
-  }
 }
 
 function paintTable() {
@@ -138,7 +136,7 @@ function paintTable() {
       </div>
       <div class="holes">${holeHTML}</div>
       <div class="bubble">${esc(state.bubbles[seat] || "")}</div>
-      <div class="eq">${eq == null ? "" : `Equity ${Math.round(eq * 100)}%`}</div>
+      <div class="eq">${eq == null ? "" : `${Math.round(eq * 100)}% vs random`}</div>
     `;
   }
   const board = engine.board || [];
@@ -147,9 +145,16 @@ function paintTable() {
   else if (engine.street === "complete") $("pot").textContent = "Settled";
   else $("pot").textContent = `Pot ${chip(engine.totalPot())} · ${streetLabel(engine.street)}`;
   $("banner").textContent = state.banner;
-  $("log").innerHTML = state.log.length
-    ? state.log.map((line) => `<p>${esc(line)}</p>`).join("")
+  const log = $("log");
+  log.innerHTML = state.log.length
+    ? state.log
+        .map((line) => {
+          const marker = /^(Flop|Turn|River)$/.test(line) ? " marker" : "";
+          return `<p class="${marker.trim()}">${esc(line)}</p>`;
+        })
+        .join("")
     : `<p class="empty">Actions appear here.</p>`;
+  log.scrollTop = log.scrollHeight;
 }
 
 function paintControls() {
@@ -182,8 +187,21 @@ function paintTrain() {
   $("train-status").textContent = state.trainPhase;
 }
 
-function styleLine(params) {
-  return `Tight ${params.tightness.toFixed(2)}  ·  Aggr ${params.aggression.toFixed(2)}  ·  Bluff ${params.bluff.toFixed(2)}`;
+function styleBits(params) {
+  const safe = params || {};
+  const num = (key) => (Number.isFinite(safe[key]) ? safe[key].toFixed(2) : "—");
+  return [
+    ["Tight", num("tightness")],
+    ["Aggr", num("aggression")],
+    ["Bluff", num("bluff")],
+  ];
+}
+
+function presetLabel(preset) {
+  const dupes = state.presets.filter((item) => item.name === preset.name);
+  if (dupes.length < 2) return preset.name;
+  if (preset.builtin) return `${preset.name} · built-in`;
+  return `${preset.name} · ${preset.id.slice(-4)}`;
 }
 
 function paintSeats() {
@@ -191,7 +209,7 @@ function paintSeats() {
     state.presets
       .map((preset) => {
         const on = preset.id === selected ? " selected" : "";
-        return `<option value="${esc(preset.id)}"${on}>${esc(preset.name)}</option>`;
+        return `<option value="${esc(preset.id)}"${on}>${esc(presetLabel(preset))}</option>`;
       })
       .join("");
   $("seat-panel").innerHTML = `
@@ -202,14 +220,18 @@ function paintSeats() {
         const current = state.seats[seat];
         const known = presetById(current.presetId);
         const custom = !known || !sameParams(known.params, current.params);
+        const seated = custom ? `${current.name} · edited` : current.name;
+        const bits = styleBits(current.params)
+          .map(([label, value]) => `<span><i>${label}</i><b>${value}</b></span>`)
+          .join("");
         return `
           <div class="seat-box">
-            <header><strong>AI ${letter}</strong><span>${custom ? "Edited" : esc(current.name)}</span></header>
+            <header><strong>AI ${letter}</strong><span title="${esc(current.name)}">${esc(seated)}</span></header>
             <select data-seat="${seat}" aria-label="AI ${letter} preset">
-              ${custom ? `<option value="" selected>Edited</option>` : ""}
+              ${custom ? `<option value="" selected>${esc(seated)}</option>` : ""}
               ${options(custom ? "" : current.presetId)}
             </select>
-            <p class="tiny">${styleLine(current.params)}</p>
+            <p class="spec">${bits}</p>
           </div>`;
       })
       .join("")}
@@ -223,7 +245,7 @@ function paintEditor() {
       const stat = preset.stats && Number.isFinite(preset.stats.ref)
         ? `<small>${preset.stats.ref >= 0 ? "+" : ""}${preset.stats.ref.toFixed(1)} bb/100 vs baseline</small>`
         : `<small>${esc(preset.blurb || "")}</small>`;
-      return `<button type="button" class="row${preset.id === state.editorId ? " selected" : ""}" data-act="pick" data-id="${esc(preset.id)}"><b>${esc(preset.name)}</b>${stat}</button>`;
+      return `<button type="button" class="row${preset.id === state.editorId ? " selected" : ""}" data-act="pick" data-id="${esc(preset.id)}"><b>${esc(presetLabel(preset))}</b>${stat}</button>`;
     })
     .join("");
   const sliders = PARAM_META.map((meta) => {
@@ -263,8 +285,8 @@ function paintAll() {
 }
 
 function pushLog(line) {
-  state.log.unshift(line);
-  state.log = state.log.slice(0, 16);
+  state.log.push(line);
+  state.log = state.log.slice(-24);
 }
 
 function onHandComplete() {
@@ -294,15 +316,31 @@ function playOneAction() {
   const seat = engine.toAct;
   const view = engine.buildView(seat);
   if (!view) return;
+  const streetBefore = engine.street;
   const samples = state.speed === "instant" ? 8 : 16;
   view.equity = monteCarloEquity(view.hole, view.board, samples, engine.rng);
-  state.equity[seat] = view.equity;
   const action = decideMinimax(view, state.seats[seat].params, engine.rng);
   const rec = engine.apply(seat, action);
-  state.bubbles[seat] = (rec.text || "").replace(/^AI [AB]\s/, "");
+  const bubble = (rec.text || "").replace(/^AI [AB]\s/, "");
   pushLog(rec.text || "");
-  if (engine.street === "complete") onHandComplete();
-  else state.banner = `${streetLabel(engine.street)} · ${state.bubbles[seat]}`;
+  if (engine.street === "complete") {
+    state.bubbles = ["", ""];
+    state.equity = [null, null];
+    onHandComplete();
+    return;
+  }
+  if (engine.street !== streetBefore) {
+    state.bubbles = ["", ""];
+    state.equity = [null, null];
+    pushLog(streetLabel(engine.street));
+    state.banner = streetLabel(engine.street);
+    return;
+  }
+  state.bubbles = ["", ""];
+  state.bubbles[seat] = bubble;
+  state.equity = [null, null];
+  state.equity[seat] = view.equity;
+  state.banner = `${streetLabel(streetBefore)} · ${bubble}`;
 }
 
 async function runLoop() {
@@ -383,12 +421,13 @@ function requestReset() {
 
 function applyPresetToSeat(seat, id) {
   const preset = presetById(id);
-  if (!preset) return;
+  if (!preset || (seat !== 0 && seat !== 1)) return false;
   state.seats[seat] = {
     presetId: preset.id,
     name: preset.name,
     params: cloneParams(preset.params),
   };
+  return true;
 }
 
 function readDraftFromInputs() {
@@ -416,8 +455,9 @@ function saveDraft() {
     origin: "user",
     blurb: "Hand-tuned minimax parameters.",
   });
+  if (!preset) return;
   state.userPresets.push(preset);
-  saveUserPresets(state.userPresets);
+  state.userPresets = saveUserPresets(state.userPresets);
   refreshPresets();
   state.editorId = preset.id;
   paintEditor();
@@ -428,7 +468,7 @@ function deleteSelected() {
   const preset = presetById(state.editorId);
   if (!preset || preset.builtin) return;
   state.userPresets = state.userPresets.filter((item) => item.id !== preset.id);
-  saveUserPresets(state.userPresets);
+  state.userPresets = saveUserPresets(state.userPresets);
   refreshPresets();
   state.editorId = "minimax-base";
   state.draft = { name: "Baseline", params: cloneParams(presetById("minimax-base").params) };
@@ -443,22 +483,38 @@ function exportPresets() {
     : [normalizePreset({ name: state.draft.name, params: state.draft.params, origin: "user" })];
   const blob = new Blob([JSON.stringify({ version: 1, presets }, null, 2)], { type: "application/json" });
   const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(blob);
+  link.href = url;
   link.download = "pooocky-presets.json";
+  document.body.appendChild(link);
   link.click();
-  URL.revokeObjectURL(link.href);
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
 async function importPresets(file) {
+  if (!file || file.size > 200_000) throw new Error("too large");
   const data = JSON.parse(await file.text());
-  const list = Array.isArray(data) ? data : data.presets;
-  if (!Array.isArray(list)) throw new Error("Preset list is missing");
-  for (const raw of list) {
-    const preset = normalizePreset({ ...raw, id: newPresetId(), builtin: false });
-    if (preset) state.userPresets.push(preset);
+  const rawList = Array.isArray(data) ? data : data && typeof data === "object" ? data.presets : null;
+  if (!Array.isArray(rawList)) throw new Error("Preset list is missing");
+  let added = 0;
+  for (const raw of rawList.slice(0, 40)) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const preset = normalizePreset({
+      name: raw.name,
+      params: raw.params,
+      blurb: raw.blurb,
+      origin: raw.origin,
+      generation: raw.generation,
+      stats: raw.stats,
+      id: newPresetId(),
+    });
+    if (!preset) continue;
+    state.userPresets.push(preset);
+    added += 1;
   }
-  state.userPresets = state.userPresets.slice(-40);
-  saveUserPresets(state.userPresets);
+  if (!added) throw new Error("Preset list is missing");
+  state.userPresets = saveUserPresets(state.userPresets);
   refreshPresets();
   const last = state.userPresets[state.userPresets.length - 1];
   if (last) {
@@ -467,7 +523,7 @@ async function importPresets(file) {
   }
   paintEditor();
   paintSeats();
-  state.trainPhase = `Imported ${list.length} preset${list.length === 1 ? "" : "s"}.`;
+  state.trainPhase = `Imported ${added} preset${added === 1 ? "" : "s"}.`;
   paintTrain();
 }
 
@@ -493,7 +549,9 @@ function adoptTrained(side, params, score, gen) {
 }
 
 function readTrainInt(id, fallback, min, max) {
-  const value = Math.round(Number($(id).value));
+  const raw = String($(id)?.value ?? "").trim();
+  if (!raw) return fallback;
+  const value = Math.round(Number(raw));
   if (!Number.isFinite(value)) return fallback;
   return Math.max(min, Math.min(max, value));
 }
@@ -531,7 +589,7 @@ async function startTraining() {
     if (last && last.gen > 0) {
       adoptTrained("A", result.paramsA, last.a, last.gen);
       adoptTrained("B", result.paramsB, last.b, last.gen);
-      saveUserPresets(state.userPresets);
+      state.userPresets = saveUserPresets(state.userPresets);
       refreshPresets();
       state.editorId = state.seats[0].presetId;
       state.draft = { name: state.seats[0].name, params: cloneParams(state.seats[0].params) };
@@ -573,9 +631,13 @@ function bind() {
     paintControls();
   });
   $("seat-panel").addEventListener("change", (event) => {
-    const seat = event.target.dataset.seat;
-    if (seat == null || !event.target.value) return;
-    applyPresetToSeat(Number(seat), event.target.value);
+    const seat = Number(event.target.dataset.seat);
+    if (seat !== 0 && seat !== 1) return;
+    if (!event.target.value) {
+      paintSeats();
+      return;
+    }
+    applyPresetToSeat(seat, event.target.value);
     paintSeats();
     paintTable();
   });
@@ -633,7 +695,9 @@ function bind() {
   });
   window.addEventListener("resize", paintCharts);
   window.addEventListener("error", (event) => {
-    state.banner = event.message || "Error";
+    if (event.target && event.target !== window) return;
+    if (!event.message) return;
+    state.banner = event.message;
     paintTable();
   });
 }

@@ -1,9 +1,12 @@
+import { fileURLToPath } from "node:url";
 import { handTitle, scoreCards } from "../js/eval.js";
 import { PokerEngine } from "../js/engine.js";
 import { decideMinimax } from "../js/agent.js";
 import { oneHand, playHand } from "../js/play.js";
 import { BASE_PARAMS, TIGHT_PARAMS, cloneParams } from "../js/params.js";
+import { normalizePreset } from "../js/presets.js";
 import { mulberry32 } from "../js/rng.js";
+import { resolveStatic } from "../serve.mjs";
 
 let failed = 0;
 
@@ -195,6 +198,26 @@ randomHands(19, 120, 80);
   const action = decideMinimax(view, quiet, rng);
   assert(action.type === "fold", `에어가 ${action.type}`);
 }
+
+const root = fileURLToPath(new URL("..", import.meta.url));
+assert(resolveStatic(root, "/js/main.js")?.endsWith("main.js"), "serves main.js");
+assert(resolveStatic(root, "/../serve.mjs") === null, "blocks parent path");
+assert(resolveStatic(root, "/js/%2e%2e/%2e%2e/serve.mjs") === null, "blocks encoded parent");
+assert(resolveStatic(root, "/%") === null, "blocks bad encoding");
+assert(resolveStatic(root, "/test/selfcheck.mjs") === null, "blocks non-asset files");
+
+const hostile = normalizePreset({
+  name: "A\u202ebaseline\n<script>",
+  id: "bad id!",
+  params: { tightness: 99, aggression: "nope" },
+  stats: { ref: "10", h2h: 1e9 },
+  blurb: "ok",
+});
+assert(hostile && !hostile.name.includes("\n") && !hostile.name.includes("\u202e"), "preset name cleaned");
+assert(hostile.params.tightness === 0.28, "tightness clamped");
+assert(hostile.params.aggression === 1, "invalid aggression ignored");
+assert(hostile.stats?.ref === 10 && hostile.stats.h2h == null, "stats cleaned");
+assert(/^[\w-]+$/.test(hostile.id), "preset id charset");
 
 if (failed) {
   console.error(`${failed}개 실패`);

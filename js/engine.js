@@ -8,6 +8,10 @@ const STREET_NEXT = {
   turn: "river",
 };
 
+function chips(n) {
+  return Math.round(n).toLocaleString("en-US");
+}
+
 function actionLabel(name, action) {
   switch (action.type) {
     case "fold":
@@ -15,13 +19,13 @@ function actionLabel(name, action) {
     case "check":
       return `${name} checks`;
     case "call":
-      return `${name} calls ${action.put}`;
+      return `${name} calls ${chips(action.put)}`;
     case "bet":
-      return `${name} bets ${action.put}`;
+      return `${name} bets ${chips(action.put)}`;
     case "raise":
-      return `${name} raises to ${action.total}`;
+      return `${name} raises to ${chips(action.total)}`;
     case "allin":
-      return `${name} all-in ${action.total}`;
+      return `${name} all-in ${chips(action.total)}`;
     default:
       return `${name} waits`;
   }

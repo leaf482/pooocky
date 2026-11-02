@@ -44,20 +44,50 @@ export function newPresetId() {
   return `p_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`;
 }
 
+function cleanText(value, fallback, max) {
+  const text = String(value ?? "")
+    .replace(/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+  return text || fallback;
+}
+
+function cleanId(id) {
+  const text = String(id ?? "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40);
+  return text.length >= 4 ? text : newPresetId();
+}
+
+function cleanStat(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || Math.abs(n) > 1e6) return null;
+  return n;
+}
+
+function cleanStats(stats) {
+  if (!stats || typeof stats !== "object" || Array.isArray(stats)) return null;
+  const ref = cleanStat(stats.ref);
+  const h2h = cleanStat(stats.h2h);
+  const out = {};
+  if (ref != null) out.ref = ref;
+  if (h2h != null) out.h2h = h2h;
+  return out.ref == null && out.h2h == null ? null : out;
+}
+
 export function normalizePreset(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  const name = String(raw.name || "Imported preset").slice(0, 32);
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const generation = Number(raw.generation);
   return {
-    id: typeof raw.id === "string" && raw.id ? raw.id : newPresetId(),
-    name,
+    id: cleanId(raw.id),
+    name: cleanText(raw.name, "Imported preset", 32),
     algorithm: "minimax",
     builtin: false,
-    blurb: String(raw.blurb || "Saved minimax parameters.").slice(0, 140),
+    blurb: cleanText(raw.blurb, "Saved minimax parameters.", 140),
     params: sanitizeParams(raw.params),
-    origin: raw.origin || "user",
-    generation: Number.isFinite(raw.generation) ? raw.generation : null,
-    createdAt: Number.isFinite(raw.createdAt) ? raw.createdAt : Date.now(),
-    stats: raw.stats && typeof raw.stats === "object" ? raw.stats : null,
+    origin: raw.origin === "train" ? "train" : "user",
+    generation: Number.isInteger(generation) && generation >= 0 && generation <= 999 ? generation : null,
+    createdAt: Date.now(),
+    stats: cleanStats(raw.stats),
   };
 }
 
@@ -76,16 +106,15 @@ export function loadUserPresets() {
 }
 
 export function saveUserPresets(presets) {
+  const user = (Array.isArray(presets) ? presets : []).filter((preset) => preset && !preset.builtin).slice(-40);
   const store = storage();
-  if (!store) return;
-  const user = presets.filter((preset) => !preset.builtin).slice(-40);
-  store.setItem(
-    STORAGE_KEY,
-    JSON.stringify({
-      version: 1,
-      presets: user,
-    }),
-  );
+  if (!store) return user;
+  try {
+    store.setItem(STORAGE_KEY, JSON.stringify({ version: 1, presets: user }));
+  } catch {
+    return user;
+  }
+  return user;
 }
 
 export function allPresets(userPresets) {

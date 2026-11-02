@@ -33,6 +33,13 @@ button:hover { border-color: #fff; }
 
 button:disabled { opacity: 0.35; cursor: default; }
 
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 1px solid #fff;
+  outline-offset: 2px;
+}
+
 button.primary {
   background: #fff;
   color: #000;
@@ -350,8 +357,9 @@ h2, h3 {
   font-variant-numeric: tabular-nums;
 }
 
-.log p { margin: 0 0 8px; }
+.log p { margin: 0 0 6px; }
 .log p.empty { color: rgba(255, 255, 255, 0.38); }
+.log p.marker { color: #fff; margin-top: 10px; }
 
 canvas { width: 100%; height: 140px; display: block; }
 
@@ -376,16 +384,27 @@ canvas { width: 100%; height: 140px; display: block; }
 #preset-name,
 .list button.row {
   width: 100%;
-  background: transparent;
+  background: #0c0c0c;
+  color: #fff;
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 10px 12px;
+  color-scheme: dark;
 }
 
-.seat-box select:focus,
+.seat-box select {
+  padding-right: 32px;
+  cursor: pointer;
+}
+
+.seat-box select option {
+  background-color: #0c0c0c;
+  color: #fff;
+}
+
 .fields input:focus,
-#preset-name:focus {
-  outline: none;
+#preset-name:focus,
+.seat-box select:focus {
   border-color: #fff;
 }
 
@@ -407,15 +426,26 @@ canvas { width: 100%; height: 140px; display: block; }
 
 .fields input { width: 100%; }
 
-.tiny {
+.spec {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
   margin: 0;
+}
+
+.spec span {
+  display: flex;
+  justify-content: flex-start;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
   color: var(--muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
+
+.spec i { font-style: normal; }
+.spec b { color: #fff; font-weight: 500; }
 
 .list {
   display: flex;
@@ -449,7 +479,7 @@ canvas { width: 100%; height: 140px; display: block; }
 
 .slider {
   display: grid;
-  grid-template-columns: 108px minmax(0, 1fr) 44px;
+  grid-template-columns: 108px minmax(0, 1fr) 52px;
   gap: 10px;
   align-items: center;
   font-size: 13px;
