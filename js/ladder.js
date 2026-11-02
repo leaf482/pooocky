@@ -170,6 +170,7 @@ export async function trainLadder(options) {
     : now() + (Number(options.hours) || 0) * 3_600_000;
   const shouldStop = options.shouldStop || (() => false);
   const onProgress = options.onProgress || (() => {});
+  const yieldTurn = options.yield || yieldNow;
   const measure = options.measure || defaultMeasure;
   const rng = options.rng;
   const population = Math.max(2, Math.min(5, options.population || 3));
@@ -235,14 +236,14 @@ export async function trainLadder(options) {
         best = { seat: candidates[i], score, index: i };
       }
       report(`Screening ${i + 1}/${candidates.length}`, best?.score?.fitness);
-      await yieldNow();
+      await yieldTurn();
     }
     if (aborted || !parent?.score) break;
 
     let promoted = false;
     if (best.index !== 0) {
       report("Confirming", best.score.fitness);
-      await yieldNow();
+      await yieldTurn();
       if (shouldStop()) break;
       const confirmCount = Math.max(pairs, 16);
       const freshH2h = makeSeeds(confirmCount, rng);
@@ -298,7 +299,7 @@ export async function trainLadder(options) {
       algorithm: champion.algorithm,
     });
     report(promoted ? "Promoted" : "Held", history[history.length - 1].fitness);
-    await yieldNow();
+    await yieldTurn();
   }
 
   return { champion, promotions, scale, history, deadline };

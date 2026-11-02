@@ -369,6 +369,23 @@ const smoked = await trainLadder({
   maxSteps: 1,
   rng: mulberry32(4),
 });
+let yields = 0;
+const yielded = await trainLadder({
+  champion: ladderChampion,
+  deadline: 1_000_000,
+  now: () => 0,
+  population: 2,
+  pairs: 8,
+  samples: 1,
+  algorithmFlip: 0,
+  maxSteps: 1,
+  rng: mulberry32(8),
+  measure: scriptedMeasure("reject"),
+  yield: async () => {
+    yields += 1;
+  },
+});
+assert(yields >= 1 && yielded.history.length === 1, "ladder can yield without timers");
 assert(smoked.history.length === 1, "one ladder step records a result");
 assert(smoked.champion.params.tightness <= 0.28 && smoked.champion.params.tightness >= -0.22, "ladder params stay in range");
 
