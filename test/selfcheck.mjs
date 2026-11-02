@@ -8,7 +8,7 @@ import { BASE_PARAMS, TIGHT_PARAMS, cloneParams } from "../js/params.js";
 import { normalizePreset } from "../js/presets.js";
 import { mulberry32 } from "../js/rng.js";
 import { resolveStatic } from "../serve.mjs";
-import { rankPresets } from "../js/ladder.js";
+import { rankPresets, trainLadder } from "../js/ladder.js";
 import { leadsByNoise, trainCompetition } from "../js/trainer.js";
 
 let failed = 0;
@@ -285,6 +285,89 @@ const rangeOnly = rankPresets(
   { seeds: [1], samples: 1 },
 );
 assert(rangeOnly.champion.algorithm === "range", "champion keeps its algorithm");
+
+const ladderChampion = {
+  id: "minimax-base",
+  name: "Baseline",
+  algorithm: "minimax",
+  params: cloneParams(BASE_PARAMS),
+};
+let ladderMeasured = false;
+const skippedLadder = await trainLadder({
+  champion: ladderChampion,
+  deadline: 5,
+  now: () => 5,
+  measure: () => {
+    ladderMeasured = true;
+    return { deals: [0, 0, 0, 0], fitness: 0 };
+  },
+});
+assert(!ladderMeasured && skippedLadder.promotions === 0, "a passed deadline does not play");
+assert(skippedLadder.champion.params.tightness === BASE_PARAMS.tightness, "a passed deadline keeps the champion");
+assert(ladderChampion.params.tightness === BASE_PARAMS.tightness, "ladder leaves the input preset alone");
+
+function scriptedMeasure(mode) {
+  let calls = 0;
+  return (candidate, champion, h2hSeeds) => {
+    const call = calls++;
+    const lead = mode === "promote" ? call % 4 === 1 || call % 4 === 3 : call % 4 === 1;
+    const deals = h2hSeeds.map(() => (lead ? 20 : 0));
+    return { deals, h2h: lead ? 20 : 0, ref: 0, fitness: lead ? 20 : 0 };
+  };
+}
+function stopAfterStep() {
+  let time = 0;
+  return {
+    now: () => time,
+    deadline: 10,
+    onProgress: (info) => {
+      if (info.phase === "Promoted" || info.phase === "Held") time = 10;
+    },
+  };
+}
+const clock = stopAfterStep();
+const promoted = await trainLadder({
+  champion: ladderChampion,
+  ...clock,
+  population: 2,
+  pairs: 8,
+  samples: 1,
+  algorithmFlip: 0,
+  rng: mulberry32(5),
+  measure: scriptedMeasure("promote"),
+});
+assert(promoted.promotions === 1 && promoted.history.length === 1, "a confirmed lead promotes once");
+assert(promoted.champion.generation === 1 && promoted.scale > 1, "a promotion widens the next mutation");
+assert(promoted.champion.algorithm === "minimax", "flip rate zero keeps the algorithm");
+assert(JSON.stringify(promoted.champion.params) !== JSON.stringify(ladderChampion.params), "a promotion changes parameters");
+
+const holdClock = stopAfterStep();
+const held = await trainLadder({
+  champion: ladderChampion,
+  ...holdClock,
+  population: 2,
+  pairs: 8,
+  samples: 1,
+  algorithmFlip: 0,
+  rng: mulberry32(6),
+  measure: scriptedMeasure("reject"),
+});
+assert(held.promotions === 0 && held.history[0].promoted === false, "a failed confirmation keeps the champion");
+assert(held.scale < 1 && held.champion.generation === 0, "a failed confirmation shrinks the mutation");
+assert(JSON.stringify(held.champion.params) === JSON.stringify(ladderChampion.params), "a failed confirmation keeps the parameters");
+
+const smoked = await trainLadder({
+  champion: ladderChampion,
+  deadline: Date.now() + 60_000,
+  population: 2,
+  pairs: 4,
+  samples: 1,
+  algorithmFlip: 0,
+  maxSteps: 1,
+  rng: mulberry32(4),
+});
+assert(smoked.history.length === 1, "one ladder step records a result");
+assert(smoked.champion.params.tightness <= 0.28 && smoked.champion.params.tightness >= -0.22, "ladder params stay in range");
 
 assert(handContinues(12, 12 + 13, []), "pocket aces continue preflop");
 assert(handContinues(12, 11, []), "suited ace-king continues preflop");
