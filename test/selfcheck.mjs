@@ -202,6 +202,33 @@ randomHands(19, 120, 80);
   assert(action.type === "fold", `에어가 ${action.type}`);
 }
 
+{
+  const view = {
+    street: "river",
+    pot: 40,
+    toCall: 80,
+    bb: 20,
+    minRaise: 20,
+    heroStack: 400,
+    oppStack: 400,
+    opponentActsAfterCheck: false,
+    equity: 0.7,
+    legal: [
+      { type: "fold", put: 0 },
+      { type: "call", put: 80, total: 80 },
+    ],
+  };
+  const loose = cloneParams(BASE_PARAMS);
+  loose.noise = 0;
+  loose.tightRiver = -0.12;
+  const tight = cloneParams(BASE_PARAMS);
+  tight.noise = 0;
+  tight.tightRiver = 0.12;
+  const calls = decideMinimax(view, loose, mulberry32(3));
+  const folds = decideMinimax(view, tight, mulberry32(3));
+  assert(calls.type === "call" && folds.type === "fold", `river offset ${calls.type} ${folds.type}`);
+}
+
 const root = fileURLToPath(new URL("..", import.meta.url));
 assert(resolveStatic(root, "/js/main.js")?.endsWith("main.js"), "serves main.js");
 assert(resolveStatic(root, "/../serve.mjs") === null, "blocks parent path");
@@ -386,6 +413,32 @@ const yielded = await trainLadder({
   },
 });
 assert(yields >= 1 && yielded.history.length === 1, "ladder can yield without timers");
+
+const streetSeen = [];
+await trainLadder({
+  champion: ladderChampion,
+  deadline: 1_000_000,
+  now: () => 0,
+  population: 2,
+  pairs: 8,
+  samples: 1,
+  algorithmFlip: 0,
+  scale: 0.35,
+  widenAfter: 0,
+  maxSteps: 1,
+  rng: mulberry32(9),
+  measure: (candidate, _champion, seeds) => {
+    streetSeen.push(candidate.params);
+    return { deals: seeds.map(() => 0), fitness: 0 };
+  },
+});
+assert(streetSeen.length >= 2 && streetSeen[0].tightRiver === 0, "the parent keeps zero street offsets");
+assert(
+  ["tightPre", "tightFlop", "tightTurn", "tightRiver"].some((key) => streetSeen[1][key] !== 0),
+  "a stalled ladder mutates street tightness",
+);
+const clamped = cloneParams({ tightRiver: 9 });
+assert(clamped.tightRiver === 0.12, "street tightness is clamped");
 assert(smoked.history.length === 1, "one ladder step records a result");
 assert(smoked.champion.params.tightness <= 0.28 && smoked.champion.params.tightness >= -0.22, "ladder params stay in range");
 

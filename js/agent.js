@@ -100,7 +100,9 @@ export function decideMinimax(view, params, rng) {
   if (legal.length === 1) return legal[0];
 
   const realize = REALIZE[view.street] ?? 1;
-  const equity = clamp(0.5 + (view.equity - 0.5) * realize - params.tightness, 0.04, 0.98);
+  const streetKey = { preflop: "tightPre", flop: "tightFlop", turn: "tightTurn", river: "tightRiver" }[view.street];
+  const streetTight = streetKey ? Number(params[streetKey]) || 0 : 0;
+  const equity = clamp(0.5 + (view.equity - 0.5) * realize - params.tightness - streetTight, 0.04, 0.98);
 
   if (rng() < (params.noise || 0)) {
     return legal[(rng() * legal.length) | 0];

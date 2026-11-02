@@ -1,5 +1,5 @@
 import { duplicateMatch } from "./play.js";
-import { BASE_PARAMS, cloneParams, mixParams, mutateParams } from "./params.js";
+import { BASE_PARAMS, STREET_TIGHT_META, cloneParams, mixParams, mutateParams } from "./params.js";
 import { gaussian } from "./rng.js";
 import { leadsByNoise } from "./trainer.js";
 
@@ -108,12 +108,14 @@ function clampScale(value) {
   return Math.max(0.35, Math.min(1.5, value));
 }
 
-function ladderCandidates(champion, population, rng, scale, flip) {
+function ladderCandidates(champion, population, rng, scale, flip, widen) {
   const list = [{ params: cloneParams(champion.params), algorithm: champion.algorithm }];
   for (let i = 1; i < population; i++) {
     const explore = i % 2 === 0;
     const base = explore ? mixParams(champion.params, BASE_PARAMS, 0.35) : champion.params;
-    const params = mutateParams(base, rng, gaussian, scale * (explore ? 0.55 : 0.85));
+    const factor = scale * (explore ? 0.55 : 0.85);
+    let params = mutateParams(base, rng, gaussian, factor);
+    if (widen) params = mutateParams(params, rng, gaussian, factor, STREET_TIGHT_META);
     let algorithm = champion.algorithm;
     if (flip > 0 && rng() < flip) algorithm = algorithm === "range" ? "minimax" : "range";
     list.push({ params, algorithm });
@@ -178,6 +180,7 @@ export async function trainLadder(options) {
   const samples = options.samples ?? 4;
   const flip = Number.isFinite(options.algorithmFlip) ? options.algorithmFlip : 0.15;
   const margin = Number.isFinite(options.margin) && options.margin > 0 ? options.margin : 2;
+  const widenAfter = Number.isInteger(options.widenAfter) && options.widenAfter >= 0 ? options.widenAfter : 6;
   const maxSteps = Number.isFinite(options.maxSteps) ? options.maxSteps : Infinity;
   const source = options.champion;
   let scale = clampScale(Number.isFinite(options.scale) ? options.scale : 1);
@@ -192,6 +195,7 @@ export async function trainLadder(options) {
     Number.isInteger(options.promotions) && options.promotions >= 0 ? options.promotions : champion.generation;
   const history = [];
   let step = 0;
+  let quietSteps = 0;
 
   function report(phase, fitness) {
     onProgress({
@@ -217,7 +221,8 @@ export async function trainLadder(options) {
     if (!rng) throw new Error("trainLadder needs rng");
     step += 1;
     const frozen = { params: cloneParams(champion.params), algorithm: champion.algorithm };
-    const candidates = ladderCandidates(frozen, population, rng, scale, flip);
+    const widen = scale <= 0.351 && quietSteps >= widenAfter;
+    const candidates = ladderCandidates(frozen, population, rng, scale, flip, widen);
     const h2hSeeds = makeSeeds(pairs, rng);
     const refSeeds = makeSeeds(pairs, rng);
     let parent = null;
@@ -290,6 +295,7 @@ export async function trainLadder(options) {
     } else {
       scale = clampScale(scale * 0.85);
     }
+    quietSteps = promoted ? 0 : quietSteps + 1;
 
     history.push({
       step,

@@ -3,7 +3,7 @@ import { drawChart } from "./chart.js";
 import { PokerEngine, streetLabel } from "./engine.js";
 import { decideMinimax } from "./agent.js";
 import { estimateEquity } from "./equity.js";
-import { PARAM_KEYS, PARAM_META, cloneParams } from "./params.js";
+import { PARAM_KEYS, PARAM_META, STREET_TIGHT_META, cloneParams } from "./params.js";
 import {
   allPresets,
   loadUserPresets,
@@ -56,7 +56,8 @@ function presetById(id) {
 }
 
 function sameParams(a, b) {
-  return PARAM_KEYS.every((key) => Math.abs(a[key] - b[key]) < 0.001);
+  const keys = PARAM_KEYS.concat(STREET_TIGHT_META.map((meta) => meta.key));
+  return keys.every((key) => Math.abs((a[key] || 0) - (b[key] || 0)) < 0.001);
 }
 
 refreshPresets();
@@ -252,10 +253,35 @@ function paintSeats() {
             </select>
             <p class="algo-tag">${current.algorithm === "range" ? "Range" : "Minimax"}</p>
             <p class="spec">${bits}</p>
+            ${streetLine(current.params)}
           </div>`;
       })
       .join("")}
   `;
+}
+
+function streetLine(params) {
+  const rows = [
+    ["Pre", "tightPre"],
+    ["Flop", "tightFlop"],
+    ["Turn", "tightTurn"],
+    ["River", "tightRiver"],
+  ];
+  if (rows.every(([, key]) => Math.abs(Number(params?.[key]) || 0) < 0.005)) return "";
+  const bits = rows
+    .map(([label, key]) => `<span><i>${label}</i><b>${Number(params[key] || 0).toFixed(2)}</b></span>`)
+    .join("");
+  return `<p class="spec streets">${bits}</p>`;
+}
+
+function sliderHTML(meta) {
+  const value = state.draft.params[meta.key];
+  return `
+    <label class="slider">
+      <span>${meta.label}</span>
+      <input type="range" min="${meta.min}" max="${meta.max}" step="${meta.step}" value="${value}" data-param="${meta.key}" aria-label="${meta.label}" />
+      <span data-val="${meta.key}">${Number(value).toFixed(2)}</span>
+    </label>`;
 }
 
 function paintEditor() {
@@ -268,15 +294,8 @@ function paintEditor() {
       return `<button type="button" class="row${preset.id === state.editorId ? " selected" : ""}" data-act="pick" data-id="${esc(preset.id)}"><b>${esc(presetLabel(preset))}</b>${stat}</button>`;
     })
     .join("");
-  const sliders = PARAM_META.map((meta) => {
-    const value = state.draft.params[meta.key];
-    return `
-      <label class="slider">
-        <span>${meta.label}</span>
-        <input type="range" min="${meta.min}" max="${meta.max}" step="${meta.step}" value="${value}" data-param="${meta.key}" />
-        <span data-val="${meta.key}">${Number(value).toFixed(2)}</span>
-      </label>`;
-  }).join("");
+  const sliders = PARAM_META.map(sliderHTML).join("");
+  const streetSliders = STREET_TIGHT_META.map(sliderHTML).join("");
   $("editor-panel").innerHTML = `
     <h2>Presets</h2>
     <p class="hint">${esc(selected?.blurb || "Tune the numbers, then seat the result.")}</p>
@@ -289,6 +308,8 @@ function paintEditor() {
       </select>
     </label>
     ${sliders}
+    <p class="algo-tag">Street tightness</p>
+    ${streetSliders}
     <div class="actions">
       <button type="button" data-act="apply" data-seat="0">Seat A</button>
       <button type="button" data-act="apply" data-seat="1">Seat B</button>
