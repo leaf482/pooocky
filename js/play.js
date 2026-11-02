@@ -38,17 +38,20 @@ export function oneHand(paramsA, paramsB, seed, button = 0, samples = 8) {
 
 export function duplicateMatch(paramsA, paramsB, pairs, samples, rng, bb = 20, fixedSeeds = null) {
   const seeds = fixedSeeds || Array.from({ length: pairs }, () => (rng() * 0x100000000) >>> 0);
+  const perSeed = [];
   let profit = 0;
   for (let i = 0; i < seeds.length; i++) {
     const button = i & 1;
-    profit += oneHand(paramsA, paramsB, seeds[i], button, samples);
-    profit -= oneHand(paramsB, paramsA, seeds[i], button, samples);
+    const delta = oneHand(paramsA, paramsB, seeds[i], button, samples) - oneHand(paramsB, paramsA, seeds[i], button, samples);
+    perSeed.push(delta);
+    profit += delta;
   }
   const hands = seeds.length * 2;
   return {
     profit,
     hands,
-    bbPer100: (profit / bb / hands) * 100,
+    perSeed,
+    bbPer100: hands ? (profit / bb / hands) * 100 : 0,
   };
 }
 

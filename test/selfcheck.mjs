@@ -2,11 +2,12 @@ import { fileURLToPath } from "node:url";
 import { handTitle, scoreCards } from "../js/eval.js";
 import { PokerEngine } from "../js/engine.js";
 import { decideMinimax } from "../js/agent.js";
-import { oneHand, playHand } from "../js/play.js";
+import { duplicateMatch, oneHand, playHand } from "../js/play.js";
 import { BASE_PARAMS, TIGHT_PARAMS, cloneParams } from "../js/params.js";
 import { normalizePreset } from "../js/presets.js";
 import { mulberry32 } from "../js/rng.js";
 import { resolveStatic } from "../serve.mjs";
+import { leadsByNoise, trainCompetition } from "../js/trainer.js";
 
 let failed = 0;
 
@@ -218,6 +219,26 @@ assert(hostile.params.tightness === 0.28, "tightness clamped");
 assert(hostile.params.aggression === 1, "invalid aggression ignored");
 assert(hostile.stats?.ref === 10 && hostile.stats.h2h == null, "stats cleaned");
 assert(/^[\w-]+$/.test(hostile.id), "preset id charset");
+
+const zeros = [0, 0, 0, 0, 0, 0, 0, 0];
+assert(leadsByNoise(zeros.map(() => 20), zeros), "steady lead replaces the parent");
+assert(!leadsByNoise([400, -10, -10, -10, -10, -10, -10, -10], zeros), "one lucky deal keeps the parent");
+assert(!leadsByNoise(zeros, zeros), "a tie keeps the parent");
+const paired = duplicateMatch(BASE_PARAMS, TIGHT_PARAMS, 2, 1, mulberry32(1));
+assert(paired.perSeed.length === 2, "match keeps one result per deal");
+assert(Math.abs(paired.perSeed.reduce((sum, n) => sum + n, 0) - paired.profit) < 1e-6, "deal results sum to profit");
+
+const trained = await trainCompetition({
+  paramsA: BASE_PARAMS,
+  paramsB: TIGHT_PARAMS,
+  generations: 1,
+  population: 2,
+  pairs: 8,
+  samples: 1,
+  rng: mulberry32(2),
+});
+assert(trained.history.length >= 1 && trained.history[0].gen === 0, "training keeps the opening generation");
+assert(trained.paramsA.tightness <= 0.28 && trained.paramsA.tightness >= -0.22, "trained tightness stays in range");
 
 if (failed) {
   console.error(`${failed}개 실패`);
