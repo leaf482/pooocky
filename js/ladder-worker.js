@@ -64,7 +64,7 @@ self.onmessage = async (event) => {
       yield: yieldToMessages,
       shouldStop: () => stop,
       onPromoted: (info) => {
-        hall = rememberChampion(hall, info.champion);
+        hall = rememberChampion(hall, { ...info.champion, fitness: info.fitness });
         let replacement = null;
         if (Date.now() - lastRerank > 30 * 60 * 1000 && hall.length >= 2) {
           lastRerank = Date.now();

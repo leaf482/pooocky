@@ -275,6 +275,7 @@ export async function trainLadder(options) {
     if (aborted || !parent?.score) break;
 
     let promoted = false;
+    let promotedFitness = null;
     if (best.index !== 0) {
       report("Confirming", best.score.fitness);
       await yieldTurn();
@@ -294,6 +295,7 @@ export async function trainLadder(options) {
         };
         promotions += 1;
         promoted = true;
+        promotedFitness = againChild.fitness;
       } else {
         scale = clampScale(scale * 0.85);
       }
@@ -309,6 +311,7 @@ export async function trainLadder(options) {
             scale,
             promotions,
             quietSteps,
+            fitness: promotedFitness,
             deadline,
             rngState: typeof rng.getState === "function" ? rng.getState() : null,
           }),
@@ -365,6 +368,11 @@ function cleanGeneration(value) {
   return Number.isInteger(value) && value >= 0 && value <= 9999 ? value : 0;
 }
 
+function cleanFitness(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && Math.abs(n) <= 1e6 ? n : null;
+}
+
 function cleanChampion(raw) {
   if (!raw?.params) return null;
   return {
@@ -373,6 +381,7 @@ function cleanChampion(raw) {
     algorithm: algorithmOf(raw),
     params: cloneParams(raw.params),
     generation: cleanGeneration(raw.generation),
+    fitness: cleanFitness(raw.fitness),
   };
 }
 
