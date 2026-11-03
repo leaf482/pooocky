@@ -11,7 +11,7 @@ import {
   normalizePreset,
   saveUserPresets,
 } from "./presets.js";
-import { formatPace, loadLadder, saveLadder } from "./ladder.js";
+import { formatPace, geneTier, loadLadder, saveLadder } from "./ladder.js";
 import { mulberry32 } from "./rng.js";
 import { trainCompetition } from "./trainer.js";
 
@@ -776,6 +776,7 @@ function persistRun(info, settings, extra = {}) {
     samples: settings.samples,
     hours: settings.hours,
     rngState: info.rngState,
+    quietSteps: info.quietSteps,
     lastRerank: extra.lastRerank || current.run?.lastRerank || 0,
   };
   state.ladderStore = saveLadder(current);
@@ -787,7 +788,9 @@ function showLadderProgress(info) {
   const algo = info.champion?.algorithm === "range" ? "Range" : "Minimax";
   const pace = formatPace(info.step, Date.now() - (state.ladderStartedAt || Date.now()));
   const paceBit = pace ? ` · ${pace}` : "";
-  state.trainPhase = `${formatRemaining(info.deadline)} · ${name} · ${algo} · ${info.promotions} promotion${info.promotions === 1 ? "" : "s"}${paceBit} · ${info.phase}`;
+  const tier = geneTier(info.scale, info.quietSteps);
+  const tierBit = tier ? ` · ${tier}` : "";
+  state.trainPhase = `${formatRemaining(info.deadline)} · ${name} · ${algo} · ${info.promotions} promotion${info.promotions === 1 ? "" : "s"}${paceBit}${tierBit} · ${info.phase}`;
   paintTrain();
 }
 
@@ -845,6 +848,7 @@ async function startLadder(resume) {
         deadline: saved?.deadline,
         scale: saved ? saved.scale : 1,
         promotions: saved ? saved.promotions : 0,
+        quietSteps: saved ? saved.quietSteps : 0,
         population,
         pairs,
         samples: 4,
@@ -886,6 +890,7 @@ async function startLadder(resume) {
           scale: result.scale,
           promotions: result.promotions,
           deadline: result.deadline,
+          quietSteps: result.quietSteps,
           rngState: result.rngState,
         },
         settings,
@@ -1024,7 +1029,9 @@ function bind() {
 state.ladderStore = loadLadder();
 if (state.ladderStore.run) {
   const run = state.ladderStore.run;
-  state.trainPhase = `Paused · ${run.champion.name} · ${formatRemaining(run.deadline)} · Resume keeps this champion.`;
+  const tier = geneTier(run.scale, run.quietSteps);
+  const tierBit = tier ? ` · ${tier}` : "";
+  state.trainPhase = `Paused · ${run.champion.name} · ${formatRemaining(run.deadline)}${tierBit} · Resume keeps this champion.`;
 }
 bind();
 paintSeats();

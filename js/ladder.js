@@ -108,6 +108,18 @@ function clampScale(value) {
   return Math.max(0.35, Math.min(1.5, value));
 }
 
+export const GENE_GATES = Object.freeze({ street: 6, range: 12, bets: 18 });
+
+/** Extra genes open only after the mutation width is at its floor. */
+export function geneTier(scale, quietSteps) {
+  if (!(Number(scale) <= 0.351)) return "";
+  const quiet = Number.isInteger(quietSteps) && quietSteps > 0 ? quietSteps : 0;
+  if (quiet >= GENE_GATES.bets) return "Bet sizes";
+  if (quiet >= GENE_GATES.range) return "Continue range";
+  if (quiet >= GENE_GATES.street) return "Street tightness";
+  return "";
+}
+
 /** Steps per hour once a minute of the run has elapsed. */
 export function formatPace(steps, elapsedMs) {
   if (!Number.isFinite(steps) || steps < 1) return "";
@@ -192,9 +204,9 @@ export async function trainLadder(options) {
   const samples = options.samples ?? 4;
   const flip = Number.isFinite(options.algorithmFlip) ? options.algorithmFlip : 0.15;
   const margin = Number.isFinite(options.margin) && options.margin > 0 ? options.margin : 2;
-  const widenAfter = Number.isInteger(options.widenAfter) && options.widenAfter >= 0 ? options.widenAfter : 6;
-  const rangeAfter = Number.isInteger(options.rangeAfter) && options.rangeAfter >= 0 ? options.rangeAfter : 12;
-  const betAfter = Number.isInteger(options.betAfter) && options.betAfter >= 0 ? options.betAfter : 18;
+  const widenAfter = Number.isInteger(options.widenAfter) && options.widenAfter >= 0 ? options.widenAfter : GENE_GATES.street;
+  const rangeAfter = Number.isInteger(options.rangeAfter) && options.rangeAfter >= 0 ? options.rangeAfter : GENE_GATES.range;
+  const betAfter = Number.isInteger(options.betAfter) && options.betAfter >= 0 ? options.betAfter : GENE_GATES.bets;
   const maxSteps = Number.isFinite(options.maxSteps) ? options.maxSteps : Infinity;
   const source = options.champion;
   let scale = clampScale(Number.isFinite(options.scale) ? options.scale : 1);
@@ -209,7 +221,7 @@ export async function trainLadder(options) {
     Number.isInteger(options.promotions) && options.promotions >= 0 ? options.promotions : champion.generation;
   const history = [];
   let step = 0;
-  let quietSteps = 0;
+  let quietSteps = Number.isInteger(options.quietSteps) && options.quietSteps >= 0 ? options.quietSteps : 0;
 
   function report(phase, fitness) {
     onProgress({
@@ -217,6 +229,7 @@ export async function trainLadder(options) {
       phase,
       promotions,
       scale,
+      quietSteps,
       fitness: fitness ?? null,
       deadline,
       rngState: typeof rng.getState === "function" ? rng.getState() : null,
@@ -281,30 +294,6 @@ export async function trainLadder(options) {
         };
         promotions += 1;
         promoted = true;
-        if (options.onPromoted) {
-          try {
-            const next = await Promise.resolve(
-              options.onPromoted({
-                champion,
-                scale,
-                promotions,
-                deadline,
-                rngState: typeof rng.getState === "function" ? rng.getState() : null,
-              }),
-            );
-            if (next?.params) {
-              champion = {
-                id: next.id ?? champion.id,
-                name: next.name || champion.name,
-                algorithm: algorithmOf(next),
-                params: cloneParams(next.params),
-                generation: Number.isInteger(next.generation) && next.generation >= 0 ? next.generation : champion.generation,
-              };
-            }
-          } catch (error) {
-            console.error(error);
-          }
-        }
       } else {
         scale = clampScale(scale * 0.85);
       }
@@ -312,6 +301,31 @@ export async function trainLadder(options) {
       scale = clampScale(scale * 0.85);
     }
     quietSteps = promoted ? 0 : quietSteps + 1;
+    if (promoted && options.onPromoted) {
+      try {
+        const next = await Promise.resolve(
+          options.onPromoted({
+            champion,
+            scale,
+            promotions,
+            quietSteps,
+            deadline,
+            rngState: typeof rng.getState === "function" ? rng.getState() : null,
+          }),
+        );
+        if (next?.params) {
+          champion = {
+            id: next.id ?? champion.id,
+            name: next.name || champion.name,
+            algorithm: algorithmOf(next),
+            params: cloneParams(next.params),
+            generation: Number.isInteger(next.generation) && next.generation >= 0 ? next.generation : champion.generation,
+          };
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
 
     history.push({
       step,
@@ -324,7 +338,7 @@ export async function trainLadder(options) {
     await yieldTurn();
   }
 
-  return { champion, promotions, scale, history, deadline };
+  return { champion, promotions, scale, quietSteps, history, deadline };
 }
 
 export const LADDER_KEY = "pooocky.ladder.v1";
@@ -397,6 +411,7 @@ export function normalizeLadder(raw, now = Date.now()) {
       samples: Math.max(1, Math.min(8, Number.isFinite(samples) ? samples : 4)),
       hours: Math.max(1, Math.min(12, Number.isFinite(hours) ? hours : 1)),
       rngState: Number.isFinite(rngState) ? rngState >>> 0 : null,
+      quietSteps: cleanGeneration(runSource.quietSteps),
       lastRerank: Number.isFinite(lastRerank) && lastRerank > 0 ? lastRerank : 0,
     },
   };
