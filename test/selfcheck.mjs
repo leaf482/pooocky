@@ -386,6 +386,7 @@ function stopAfterStep() {
   };
 }
 const clock = stopAfterStep();
+let promotedFitness = null;
 const promoted = await trainLadder({
   champion: ladderChampion,
   ...clock,
@@ -394,9 +395,13 @@ const promoted = await trainLadder({
   samples: 1,
   algorithmFlip: 0,
   rng: mulberry32(5),
+  onPromoted: (info) => {
+    promotedFitness = info.fitness;
+  },
   measure: scriptedMeasure("promote"),
 });
 assert(promoted.promotions === 1 && promoted.history.length === 1, "a confirmed lead promotes once");
+assert(promotedFitness === 20, "a promotion records its confirming score");
 assert(promoted.champion.generation === 1 && promoted.scale === 1, "a promotion keeps the mutation width");
 assert(promoted.champion.algorithm === "minimax", "flip rate zero keeps the algorithm");
 assert(promoted.quietSteps === 0, "a promotion clears the stall");
@@ -564,6 +569,10 @@ assert(mulberry32(mark)() === upcoming, "rng resumes from its saved state");
 let hall = [];
 for (let i = 0; i < 10; i++) hall = rememberChampion(hall, { name: `C${i}`, params: BASE_PARAMS, generation: i });
 assert(hall.length === 8 && hall[0].generation === 2 && hall[7].generation === 9, "hall keeps the newest eight");
+const scored = rememberChampion([], { name: "Scout", params: BASE_PARAMS, generation: 1, fitness: 12.5 });
+assert(scored[0].fitness === 12.5, "hall keeps a promotion score");
+const wild = rememberChampion([], { name: "Scout", params: BASE_PARAMS, generation: 1, fitness: 1e9 });
+assert(wild[0].fitness === null, "hall drops a score that cannot be a bb/100");
 
 const expired = normalizeLadder(
   {

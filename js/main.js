@@ -205,8 +205,12 @@ function paintHall() {
   wrap.hidden = hall.length === 0;
   $("hall").innerHTML = hall
     .map(
-      (row, index) =>
-        `<button type="button" class="row" data-hall="${index}">${esc(row.name)} · gen ${row.generation}</button>`,
+      (row, index) => {
+        const score = Number.isFinite(row.fitness)
+          ? ` · ${row.fitness >= 0 ? "+" : ""}${row.fitness.toFixed(1)} bb/100`
+          : "";
+        return `<button type="button" class="row" data-hall="${index}">${esc(row.name)} · gen ${row.generation}${score}</button>`;
+      },
     )
     .join("");
 }
