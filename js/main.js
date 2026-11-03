@@ -11,7 +11,7 @@ import {
   normalizePreset,
   saveUserPresets,
 } from "./presets.js";
-import { formatPace, geneTier, loadLadder, saveLadder } from "./ladder.js";
+import { formatPace, geneTier, loadLadder, promotionScores, saveLadder } from "./ladder.js";
 import { mulberry32 } from "./rng.js";
 import { trainCompetition } from "./trainer.js";
 
@@ -185,6 +185,16 @@ function paintCharts() {
   drawChart($("match-chart"), [{ name: "AI A", color: "#ffffff", data: state.profitSeries }], {
     empty: "No hands yet",
   });
+  const scores = promotionScores(state.ladderStore?.hall);
+  const title = $("growth-title");
+  if (scores.length) {
+    if (title) title.textContent = "Promotions";
+    drawChart($("growth-chart"), [{ name: "bb/100", color: "#ffffff", data: scores }], {
+      empty: "One promotion so far",
+    });
+    return;
+  }
+  if (title) title.textContent = "Versus baseline";
   drawChart(
     $("growth-chart"),
     [
@@ -213,6 +223,7 @@ function paintHall() {
       },
     )
     .join("");
+  paintCharts();
 }
 
 function styleBits(params) {

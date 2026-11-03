@@ -71,7 +71,7 @@
           <h2>Training</h2>
           <p class="hint">
             Candidates replay the same deals. A child replaces its parent only when the lead beats the noise, then again on fresh deals.
-            The curve is bb/100 against frozen Baseline.
+            The curve is bb/100 against frozen Baseline. After a ladder promotion, that curve shows the confirming score.
             Ladder ranks the saved presets, freezes the winner, and mutates a copy until Hours runs out.
             The search keeps running while this tab is in the background.
           </p>
@@ -92,7 +92,7 @@
             <h3>Hall of fame</h3>
             <div id="hall" class="hall"></div>
           </div>
-          <h3>Versus baseline</h3>
+          <h3 id="growth-title">Versus baseline</h3>
           <canvas id="growth-chart" width="320" height="150"></canvas>
         </section>
       </aside>
