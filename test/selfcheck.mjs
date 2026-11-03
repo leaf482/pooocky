@@ -8,7 +8,7 @@ import { BASE_PARAMS, TIGHT_PARAMS, cloneParams } from "../js/params.js";
 import { normalizePreset } from "../js/presets.js";
 import { mulberry32 } from "../js/rng.js";
 import { resolveStatic } from "../serve.mjs";
-import { normalizeLadder, rankPresets, rememberChampion, trainLadder } from "../js/ladder.js";
+import { formatPace, normalizeLadder, rankPresets, rememberChampion, trainLadder } from "../js/ladder.js";
 import { leadsByNoise, trainCompetition } from "../js/trainer.js";
 
 let failed = 0;
@@ -519,6 +519,10 @@ const clamped = cloneParams({ tightRiver: 9, openPre: 9, sizeValue: 9 });
 assert(clamped.tightRiver === 0.12, "street tightness is clamped");
 assert(clamped.openPre === 3, "continue range is clamped");
 assert(clamped.sizeValue === 0.45, "bet size offset is clamped");
+assert(formatPace(0, 120_000) === "", "pace waits for a finished step");
+assert(formatPace(3, 30_000) === "", "pace waits through the first minute");
+assert(formatPace(2, 1_800_000) === "4.0 steps/h", "pace is steps per hour");
+assert(formatPace(120, 3_600_000) === "120 steps/h", "a fast pace rounds to a whole number");
 assert(smoked.history.length === 1, "one ladder step records a result");
 assert(smoked.champion.params.tightness <= 0.28 && smoked.champion.params.tightness >= -0.22, "ladder params stay in range");
 
