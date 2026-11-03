@@ -8,7 +8,7 @@ import { BASE_PARAMS, TIGHT_PARAMS, cloneParams } from "../js/params.js";
 import { normalizePreset } from "../js/presets.js";
 import { mulberry32 } from "../js/rng.js";
 import { resolveStatic } from "../serve.mjs";
-import { formatPace, normalizeLadder, rankPresets, rememberChampion, trainLadder } from "../js/ladder.js";
+import { formatPace, geneTier, normalizeLadder, rankPresets, rememberChampion, trainLadder } from "../js/ladder.js";
 import { leadsByNoise, trainCompetition } from "../js/trainer.js";
 
 let failed = 0;
@@ -399,6 +399,7 @@ const promoted = await trainLadder({
 assert(promoted.promotions === 1 && promoted.history.length === 1, "a confirmed lead promotes once");
 assert(promoted.champion.generation === 1 && promoted.scale === 1, "a promotion keeps the mutation width");
 assert(promoted.champion.algorithm === "minimax", "flip rate zero keeps the algorithm");
+assert(promoted.quietSteps === 0, "a promotion clears the stall");
 assert(JSON.stringify(promoted.champion.params) !== JSON.stringify(ladderChampion.params), "a promotion changes parameters");
 
 const holdClock = stopAfterStep();
@@ -413,6 +414,7 @@ const held = await trainLadder({
   measure: scriptedMeasure("reject"),
 });
 assert(held.promotions === 0 && held.history[0].promoted === false, "a failed confirmation keeps the champion");
+assert(held.quietSteps === 1, "a held step counts toward the stall");
 assert(held.scale < 1 && held.champion.generation === 0, "a failed confirmation shrinks the mutation");
 assert(JSON.stringify(held.champion.params) === JSON.stringify(ladderChampion.params), "a failed confirmation keeps the parameters");
 
@@ -515,6 +517,30 @@ await trainLadder({
 assert(betSeen[0].sizeValue === 0 && betSeen[0].sizeBluff === 0, "the parent keeps one bet size");
 assert(betSeen[1].tightRiver === 0 && betSeen[1].openPre === 0, "bet-size widening leaves the earlier genes alone");
 assert(betSeen[1].sizeValue !== 0 || betSeen[1].sizeBluff !== 0, "the longest stall mutates the two bet sizes");
+const resumed = [];
+const resumedRun = await trainLadder({
+  champion: ladderChampion,
+  deadline: 1_000_000,
+  now: () => 0,
+  population: 2,
+  pairs: 8,
+  samples: 1,
+  algorithmFlip: 0,
+  scale: 0.35,
+  quietSteps: 6,
+  maxSteps: 1,
+  rng: mulberry32(9),
+  measure: (candidate, _champion, seeds) => {
+    resumed.push(candidate.params);
+    return { deals: seeds.map(() => 0), fitness: 0 };
+  },
+});
+assert(
+  ["tightPre", "tightFlop", "tightTurn", "tightRiver"].some((key) => resumed[1][key] !== 0),
+  "a resumed stall keeps the street genes open",
+);
+assert(resumed[1].openPre === 0 && resumed[1].sizeValue === 0, "a six-step stall leaves the later genes closed");
+assert(resumedRun.quietSteps === 7, "a resumed hold keeps counting");
 const clamped = cloneParams({ tightRiver: 9, openPre: 9, sizeValue: 9 });
 assert(clamped.tightRiver === 0.12, "street tightness is clamped");
 assert(clamped.openPre === 3, "continue range is clamped");
@@ -523,6 +549,9 @@ assert(formatPace(0, 120_000) === "", "pace waits for a finished step");
 assert(formatPace(3, 30_000) === "", "pace waits through the first minute");
 assert(formatPace(2, 1_800_000) === "4.0 steps/h", "pace is steps per hour");
 assert(formatPace(120, 3_600_000) === "120 steps/h", "a fast pace rounds to a whole number");
+assert(geneTier(1, 20) === "" && geneTier(0.35, 5) === "", "extra genes stay shut while the search is still moving");
+assert(geneTier(0.35, 6) === "Street tightness", "six quiet steps open street tightness");
+assert(geneTier(0.35, 12) === "Continue range" && geneTier(0.35, 18) === "Bet sizes", "later stalls open the next genes");
 assert(smoked.history.length === 1, "one ladder step records a result");
 assert(smoked.champion.params.tightness <= 0.28 && smoked.champion.params.tightness >= -0.22, "ladder params stay in range");
 
@@ -557,6 +586,7 @@ const live = normalizeLadder(
       pairs: 3,
       samples: 99,
       hours: 0,
+      quietSteps: 7,
     },
   },
   20,
@@ -565,6 +595,11 @@ assert(live.run.deadline === 50 && live.run.scale === 0.35, "a live run keeps it
 assert(live.run.champion.params.tightness === 0.28 && live.run.champion.algorithm === "minimax", "a saved champion is clamped");
 assert(live.run.population === 5 && live.run.pairs === 8 && live.run.samples === 8 && live.run.hours === 1, "saved ladder settings are clamped");
 assert(live.run.rngState === 12, "saved rng state is kept");
+assert(live.run.quietSteps === 7, "a saved stall is kept");
+assert(
+  normalizeLadder({ run: { champion: { name: "A", params: BASE_PARAMS }, deadline: 50, quietSteps: 10000 } }, 20).run.quietSteps === 0,
+  "a huge stall is dropped",
+);
 
 assert(handContinues(12, 12 + 13, []), "pocket aces continue preflop");
 assert(handContinues(12, 11, []), "suited ace-king continues preflop");
