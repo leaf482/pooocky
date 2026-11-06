@@ -8,7 +8,7 @@ import { BASE_PARAMS, TIGHT_PARAMS, cloneParams } from "../js/params.js";
 import { normalizePreset } from "../js/presets.js";
 import { mulberry32 } from "../js/rng.js";
 import { resolveStatic } from "../serve.mjs";
-import { formatPace, geneTier, normalizeLadder, promotionScores, rankPresets, rememberChampion, trainLadder } from "../js/ladder.js";
+import { evolvedGenes, formatPace, geneTier, normalizeLadder, promotionScores, rankPresets, rememberChampion, trainLadder } from "../js/ladder.js";
 import { leadsByNoise, trainCompetition } from "../js/trainer.js";
 
 let failed = 0;
@@ -607,6 +607,12 @@ assert(
   JSON.stringify(promotionScores([{ fitness: 4 }, { fitness: null }, { fitness: 1e9 }, { fitness: -2.5 }])) === "[4,-2.5]",
   "the promotion curve keeps finite scores in order",
 );
+assert(
+  evolvedGenes({ tightRiver: 0.04, openPre: 2, sizeValue: -0.12, tightPre: 0.001 }, "range").join(" · ") ===
+    "Range · River 0.04 · Preflop open 2 · Value size -0.12",
+  "hall rows name the genes that moved",
+);
+assert(evolvedGenes({ openPre: 0.2 }, "minimax").length === 0, "a fraction of a rank stays off the hall row");
 const wild = rememberChampion([], { name: "Scout", params: BASE_PARAMS, generation: 1, fitness: 1e9 });
 assert(wild[0].fitness === null, "hall drops a score that cannot be a bb/100");
 
