@@ -8,7 +8,7 @@ import { BASE_PARAMS, TIGHT_PARAMS, cloneParams } from "../js/params.js";
 import { normalizePreset } from "../js/presets.js";
 import { mulberry32 } from "../js/rng.js";
 import { resolveStatic } from "../serve.mjs";
-import { formatPace, geneTier, normalizeLadder, rankPresets, rememberChampion, trainLadder } from "../js/ladder.js";
+import { formatPace, geneTier, normalizeLadder, promotionScores, rankPresets, rememberChampion, trainLadder } from "../js/ladder.js";
 import { leadsByNoise, trainCompetition } from "../js/trainer.js";
 
 let failed = 0;
@@ -571,6 +571,10 @@ for (let i = 0; i < 10; i++) hall = rememberChampion(hall, { name: `C${i}`, para
 assert(hall.length === 8 && hall[0].generation === 2 && hall[7].generation === 9, "hall keeps the newest eight");
 const scored = rememberChampion([], { name: "Scout", params: BASE_PARAMS, generation: 1, fitness: 12.5 });
 assert(scored[0].fitness === 12.5, "hall keeps a promotion score");
+assert(
+  JSON.stringify(promotionScores([{ fitness: 4 }, { fitness: null }, { fitness: 1e9 }, { fitness: -2.5 }])) === "[4,-2.5]",
+  "the promotion curve keeps finite scores in order",
+);
 const wild = rememberChampion([], { name: "Scout", params: BASE_PARAMS, generation: 1, fitness: 1e9 });
 assert(wild[0].fitness === null, "hall drops a score that cannot be a bb/100");
 

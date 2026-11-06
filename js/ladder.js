@@ -130,6 +130,17 @@ export function formatPace(steps, elapsedMs) {
   return `${text} steps/h`;
 }
 
+/** Confirming scores, oldest promotion first. Rows without a score are skipped. */
+export function promotionScores(hall) {
+  if (!Array.isArray(hall)) return [];
+  const scores = [];
+  for (const row of hall) {
+    const n = row?.fitness;
+    if (typeof n === "number" && Number.isFinite(n) && Math.abs(n) <= 1e6) scores.push(n);
+  }
+  return scores;
+}
+
 function ladderCandidates(champion, population, rng, scale, flip, widen, openRange, splitBets) {
   const list = [{ params: cloneParams(champion.params), algorithm: champion.algorithm }];
   for (let i = 1; i < population; i++) {
