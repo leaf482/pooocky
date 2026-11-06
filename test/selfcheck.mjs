@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { handTitle, scoreCards } from "../js/eval.js";
 import { PokerEngine } from "../js/engine.js";
-import { decideMinimax } from "../js/agent.js";
+import { decideMinimax, scoreAction } from "../js/agent.js";
 import { handContinues } from "../js/equity.js";
 import { duplicateMatch, oneHand, playHand } from "../js/play.js";
 import { BASE_PARAMS, TIGHT_PARAMS, cloneParams } from "../js/params.js";
@@ -257,6 +257,38 @@ randomHands(19, 120, 80);
   const value = decideMinimax(view, smaller, mulberry32(4));
   const bluff = decideMinimax(view, bluffOnly, mulberry32(4));
   assert(one.put === 80 && value.put === 60 && bluff.put === 80, `bet sizes ${one.put} ${value.put} ${bluff.put}`);
+}
+
+{
+  const view = {
+    street: "river",
+    pot: 80,
+    toCall: 0,
+    bb: 20,
+    minRaise: 20,
+    heroStack: 400,
+    oppStack: 400,
+    opponentActsAfterCheck: false,
+    equity: 0.7,
+    legal: [
+      { type: "check", put: 0 },
+      { type: "bet", put: 40, total: 40 },
+      { type: "bet", put: 80, total: 80 },
+    ],
+  };
+  const plain = cloneParams(BASE_PARAMS);
+  plain.noise = 0;
+  plain.tightness = 0;
+  const smaller = cloneParams(plain);
+  smaller.sizeValue = -0.45;
+  const bluffOnly = cloneParams(plain);
+  bluffOnly.sizeBluff = -0.45;
+  const gap = Math.abs(scoreAction(view.legal[2], view, 0.7, plain) - scoreAction(view.legal[1], view, 0.7, plain));
+  assert(gap > Math.max(0.6, view.pot * 0.012), "this size choice sits outside the tie band");
+  const one = decideMinimax(view, plain, mulberry32(4));
+  const value = decideMinimax(view, smaller, mulberry32(4));
+  const bluff = decideMinimax(view, bluffOnly, mulberry32(4));
+  assert(one.put === 80 && value.put === 40 && bluff.put === 80, `wide bet size ${one.put} ${value.put} ${bluff.put}`);
 }
 
 const root = fileURLToPath(new URL("..", import.meta.url));

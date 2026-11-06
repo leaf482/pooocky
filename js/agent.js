@@ -94,6 +94,14 @@ function sizeDistance(action, target, pot) {
   return Math.abs(action.put / Math.max(pot, 1) - target);
 }
 
+function isStake(action) {
+  return action.type === "bet" || action.type === "raise" || action.type === "allin";
+}
+
+function bySize(target, pot) {
+  return (a, b) => sizeDistance(a.action, target, pot) - sizeDistance(b.action, target, pot) || b.ev - a.ev;
+}
+
 /**
  * Two-ply expectiminimax on the betting tree.
  * Equity is a chance node (Monte Carlo). Hero maximizes.
@@ -124,12 +132,15 @@ export function decideMinimax(view, params, rng) {
   const band = Math.max(0.6, view.pot * 0.012);
   const pool = scored.filter((item) => item.ev >= bestEv - band);
   const target = betTarget(params, equity);
-  pool.sort(
-    (a, b) =>
-      sizeDistance(a.action, target, view.pot) - sizeDistance(b.action, target, view.pot) ||
-      b.ev - a.ev,
-  );
-  return pool[0].action;
+  pool.sort(bySize(target, view.pot));
+  const picked = pool[0].action;
+  const offset = equity >= 0.55 ? Number(params.sizeValue) || 0 : Number(params.sizeBluff) || 0;
+  if (!offset || !isStake(picked)) return picked;
+  const wide = Math.max(band, view.pot * 0.04);
+  const sized = scored.filter((item) => isStake(item.action) && item.ev >= bestEv - wide);
+  if (sized.length < 2) return picked;
+  sized.sort(bySize(target, view.pot));
+  return sized[0].action;
 }
 
 export { scoreAction };
