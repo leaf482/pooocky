@@ -141,6 +141,25 @@ export function promotionScores(hall) {
   return scores;
 }
 
+/** Extra genes that moved off zero, for a hall row. */
+export function evolvedGenes(params, algorithm) {
+  const bits = [];
+  if (algorithm === "range") bits.push("Range");
+  const metas = [...STREET_TIGHT_META, ...RANGE_OPEN_META, ...BET_SIZE_META];
+  for (const meta of metas) {
+    const n = Number(params?.[meta.key]);
+    if (!Number.isFinite(n)) continue;
+    if (meta.step >= 1) {
+      const shown = Math.round(n);
+      if (shown === 0) continue;
+      bits.push(`${meta.label} ${shown}`);
+    } else if (Math.abs(n) >= 0.005) {
+      bits.push(`${meta.label} ${n.toFixed(2)}`);
+    }
+  }
+  return bits;
+}
+
 function ladderCandidates(champion, population, rng, scale, flip, widen, openRange, splitBets) {
   const list = [{ params: cloneParams(champion.params), algorithm: champion.algorithm }];
   for (let i = 1; i < population; i++) {
