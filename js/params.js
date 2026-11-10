@@ -193,9 +193,15 @@ export function mixParams(a, b, t) {
 
 export function mutateParams(params, rng, gaussian, scale = 1, metas = PARAM_META) {
   const out = { ...sanitizeParams(params) };
+  const width = Number.isFinite(scale) && scale > 0 ? scale : 1;
   for (const meta of metas) {
-    const span = (meta.max - meta.min) * 0.12 * scale;
-    out[meta.key] = clamp(out[meta.key] + gaussian(rng) * span, meta.min, meta.max);
+    if (meta.step >= 1) {
+      const jump = Math.round(gaussian(rng) * Math.max(width, 1));
+      out[meta.key] = clamp(out[meta.key] + jump, meta.min, meta.max);
+    } else {
+      const span = (meta.max - meta.min) * 0.12 * width;
+      out[meta.key] = clamp(out[meta.key] + gaussian(rng) * span, meta.min, meta.max);
+    }
   }
   return out;
 }

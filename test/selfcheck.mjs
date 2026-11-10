@@ -4,9 +4,9 @@ import { PokerEngine } from "../js/engine.js";
 import { decideMinimax, scoreAction } from "../js/agent.js";
 import { handContinues } from "../js/equity.js";
 import { duplicateMatch, oneHand, playHand } from "../js/play.js";
-import { BASE_PARAMS, TIGHT_PARAMS, cloneParams } from "../js/params.js";
+import { BASE_PARAMS, RANGE_OPEN_META, TIGHT_PARAMS, cloneParams, mutateParams } from "../js/params.js";
 import { normalizePreset } from "../js/presets.js";
-import { mulberry32 } from "../js/rng.js";
+import { gaussian, mulberry32 } from "../js/rng.js";
 import { resolveStatic } from "../serve.mjs";
 import { evolvedGenes, formatPace, geneTier, normalizeLadder, promotionScores, rankPresets, rememberChampion, trainLadder } from "../js/ladder.js";
 import { leadsByNoise, trainCompetition } from "../js/trainer.js";
@@ -613,6 +613,13 @@ assert(
   "hall rows name the genes that moved",
 );
 assert(evolvedGenes({ openPre: 0.2 }, "minimax").length === 0, "a fraction of a rank stays off the hall row");
+let stepped = false;
+for (let seed = 1; seed <= 40; seed++) {
+  const child = mutateParams(BASE_PARAMS, mulberry32(seed), gaussian, 0.3, RANGE_OPEN_META);
+  assert(Number.isInteger(child.openPre) && Number.isInteger(child.openPost), "continue ranks mutate by whole ranks");
+  if (child.openPre !== 0 || child.openPost !== 0) stepped = true;
+}
+assert(stepped, "a narrow continue-range mutation changes a rank");
 const wild = rememberChampion([], { name: "Scout", params: BASE_PARAMS, generation: 1, fitness: 1e9 });
 assert(wild[0].fitness === null, "hall drops a score that cannot be a bb/100");
 
@@ -659,6 +666,8 @@ assert(handContinues(12, 12 + 13, [0, 5 + 13, 7 + 26]), "aces continue on a dry 
 assert(!handContinues(1 + 39, 2 + 26, [0, 5 + 13, 7 + 13]), "unrelated low cards fold on a dry board");
 assert(handContinues(7, 6, []), "suited nine-eight continues preflop");
 assert(!handContinues(7, 6, [], { openPre: 3 }), "a tighter preflop range folds suited nine-eight");
+assert(handContinues(8, 6, []), "suited ten-eight continues preflop");
+assert(!handContinues(8, 6, [], { openPre: 1 }), "one tighter rank folds suited ten-eight");
 assert(handContinues(10, 22, [0, 17, 32]), "queen-jack continues as two overcards");
 assert(!handContinues(10, 22, [0, 17, 32], { openPost: 1 }), "a tighter overcard line folds queen-jack");
 
