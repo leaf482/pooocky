@@ -160,6 +160,25 @@ export function evolvedGenes(params, algorithm) {
   return bits;
 }
 
+const STYLE_SHIFT = [
+  ["Tight", "tightness"],
+  ["Aggr", "aggression"],
+  ["Bluff", "bluff"],
+];
+
+/** Core sliders that moved at least 0.02 from the previous champion, or from Baseline. */
+export function styleShift(params, previous) {
+  const prior = previous || BASE_PARAMS;
+  const bits = [];
+  for (const [label, key] of STYLE_SHIFT) {
+    const n = Number(params?.[key]);
+    const before = Number(prior[key]);
+    if (!Number.isFinite(n) || !Number.isFinite(before) || Math.abs(n - before) < 0.02) continue;
+    bits.push(`${label} ${n.toFixed(2)}`);
+  }
+  return bits;
+}
+
 function ladderCandidates(champion, population, rng, scale, flip, widen, openRange, splitBets) {
   const list = [{ params: cloneParams(champion.params), algorithm: champion.algorithm }];
   for (let i = 1; i < population; i++) {

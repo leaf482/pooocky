@@ -8,7 +8,7 @@ import { BASE_PARAMS, RANGE_OPEN_META, TIGHT_PARAMS, cloneParams, mutateParams }
 import { normalizePreset } from "../js/presets.js";
 import { gaussian, mulberry32 } from "../js/rng.js";
 import { resolveStatic } from "../serve.mjs";
-import { evolvedGenes, formatPace, geneTier, normalizeLadder, promotionScores, rankPresets, rememberChampion, trainLadder } from "../js/ladder.js";
+import { evolvedGenes, formatPace, geneTier, normalizeLadder, promotionScores, rankPresets, rememberChampion, styleShift, trainLadder } from "../js/ladder.js";
 import { leadsByNoise, trainCompetition } from "../js/trainer.js";
 
 let failed = 0;
@@ -613,6 +613,12 @@ assert(
   "hall rows name the genes that moved",
 );
 assert(evolvedGenes({ openPre: 0.2 }, "minimax").length === 0, "a fraction of a rank stays off the hall row");
+assert(styleShift({ tightness: 0.08, aggression: 1, bluff: 0.08 }, null).join(" · ") === "Tight 0.08", "the first champion is compared with Baseline");
+assert(styleShift({ tightness: 0.03 }, BASE_PARAMS).length === 0, "a tiny slider move stays off the hall row");
+assert(
+  styleShift({ tightness: 0.08, aggression: 1.2, bluff: 0.08 }, { tightness: 0.08, aggression: 1, bluff: 0.08 }).join(" · ") === "Aggr 1.20",
+  "a later champion is compared with the previous one",
+);
 let stepped = false;
 for (let seed = 1; seed <= 40; seed++) {
   const child = mutateParams(BASE_PARAMS, mulberry32(seed), gaussian, 0.3, RANGE_OPEN_META);

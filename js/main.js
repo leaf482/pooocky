@@ -11,7 +11,7 @@ import {
   normalizePreset,
   saveUserPresets,
 } from "./presets.js";
-import { evolvedGenes, formatPace, geneTier, loadLadder, promotionScores, saveLadder } from "./ladder.js";
+import { evolvedGenes, formatPace, geneTier, loadLadder, promotionScores, saveLadder, styleShift } from "./ladder.js";
 import { mulberry32 } from "./rng.js";
 import { trainCompetition } from "./trainer.js";
 
@@ -219,9 +219,11 @@ function paintHall() {
         const score = Number.isFinite(row.fitness)
           ? ` · ${row.fitness >= 0 ? "+" : ""}${row.fitness.toFixed(1)} bb/100`
           : "";
+        const shift = styleShift(row.params, index > 0 ? hall[index - 1].params : null);
+        const shiftBit = shift.length ? ` · ${shift.join(" · ")}` : "";
         const genes = evolvedGenes(row.params, row.algorithm);
         const geneBit = genes.length ? ` · ${genes.join(" · ")}` : "";
-        return `<button type="button" class="row" data-hall="${index}">${esc(row.name)} · gen ${row.generation}${score}${geneBit}</button>`;
+        return `<button type="button" class="row" data-hall="${index}">${esc(row.name)} · gen ${row.generation}${score}${shiftBit}${geneBit}</button>`;
       },
     )
     .join("");
