@@ -232,6 +232,32 @@ randomHands(19, 120, 80);
 {
   const view = {
     street: "river",
+    pot: 80,
+    toCall: 60,
+    bb: 20,
+    minRaise: 20,
+    heroStack: 400,
+    oppStack: 400,
+    opponentActsAfterCheck: false,
+    equity: 0.46,
+    legal: [
+      { type: "fold", put: 0 },
+      { type: "call", put: 60, total: 60 },
+    ],
+  };
+  const plain = cloneParams(BASE_PARAMS);
+  plain.noise = 0;
+  plain.tightness = 0;
+  const tighter = cloneParams(plain);
+  tighter.tightRiver = 0.04;
+  const calls = decideMinimax(view, plain, mulberry32(4));
+  const folds = decideMinimax(view, tighter, mulberry32(4));
+  assert(calls.type === "call" && folds.type === "fold", `small river offset ${calls.type} ${folds.type}`);
+}
+
+{
+  const view = {
+    street: "river",
     pot: 100,
     toCall: 0,
     bb: 20,
@@ -505,6 +531,10 @@ assert(streetSeen.length >= 2 && streetSeen[0].tightRiver === 0, "the parent kee
 assert(
   ["tightPre", "tightFlop", "tightTurn", "tightRiver"].some((key) => streetSeen[1][key] !== 0),
   "a stalled ladder mutates street tightness",
+);
+assert(
+  Math.max(...["tightPre", "tightFlop", "tightTurn", "tightRiver"].map((key) => Math.abs(streetSeen[1][key]))) >= 0.02,
+  "a street step is large enough to change a close decision",
 );
 assert(streetSeen[1].openPre === 0 && streetSeen[1].openPost === 0, "street widening leaves the continue range alone");
 assert(streetSeen[1].sizeValue === 0 && streetSeen[1].sizeBluff === 0, "street widening leaves bet sizes alone");

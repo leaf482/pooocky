@@ -186,7 +186,7 @@ function ladderCandidates(champion, population, rng, scale, flip, widen, openRan
     const base = explore ? mixParams(champion.params, BASE_PARAMS, 0.35) : champion.params;
     const factor = scale * (explore ? 0.55 : 0.85);
     let params = mutateParams(base, rng, gaussian, factor);
-    if (widen) params = mutateParams(params, rng, gaussian, factor, STREET_TIGHT_META);
+    if (widen) params = mutateParams(params, rng, gaussian, Math.max(factor, 1.5), STREET_TIGHT_META);
     if (openRange) params = mutateParams(params, rng, gaussian, factor, RANGE_OPEN_META);
     if (splitBets) params = mutateParams(params, rng, gaussian, factor, BET_SIZE_META);
     let algorithm = champion.algorithm;
