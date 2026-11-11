@@ -649,6 +649,11 @@ assert(
   styleShift({ tightness: 0.08, aggression: 1.2, bluff: 0.08 }, { tightness: 0.08, aggression: 1, bluff: 0.08 }).join(" · ") === "Aggr 1.20",
   "a later champion is compared with the previous one",
 );
+assert(
+  styleShift({ tightness: 0.02, aggression: 1, bluff: 0.08, foldEquity: 1.2, betMix: 0.6 }, null).join(" · ") === "Fold 1.20 · Bet 0.60",
+  "fold equity and bet size show up when they move",
+);
+assert(styleShift({ betMix: 0.46 }, BASE_PARAMS).length === 0, "a hundredth of bet size stays off the hall row");
 let stepped = false;
 for (let seed = 1; seed <= 40; seed++) {
   const child = mutateParams(BASE_PARAMS, mulberry32(seed), gaussian, 0.3, RANGE_OPEN_META);
