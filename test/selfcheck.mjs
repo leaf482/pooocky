@@ -654,6 +654,8 @@ assert(
   "fold equity and bet size show up when they move",
 );
 assert(styleShift({ betMix: 0.46 }, BASE_PARAMS).length === 0, "a hundredth of bet size stays off the hall row");
+assert(styleShift({ noise: 0.08 }, null).join(" · ") === "Noise 0.08", "noise shows up when it moves");
+assert(styleShift({ noise: 0.04 }, BASE_PARAMS).length === 0, "a hundredth of noise stays off the hall row");
 let stepped = false;
 for (let seed = 1; seed <= 40; seed++) {
   const child = mutateParams(BASE_PARAMS, mulberry32(seed), gaussian, 0.3, RANGE_OPEN_META);
