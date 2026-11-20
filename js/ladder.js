@@ -164,6 +164,8 @@ const STYLE_SHIFT = [
   ["Tight", "tightness"],
   ["Aggr", "aggression"],
   ["Bluff", "bluff"],
+  ["Fold", "foldEquity"],
+  ["Bet", "betMix"],
 ];
 
 /** Core sliders that moved at least 0.02 from the previous champion, or from Baseline. */
