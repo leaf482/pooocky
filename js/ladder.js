@@ -166,6 +166,7 @@ const STYLE_SHIFT = [
   ["Bluff", "bluff"],
   ["Fold", "foldEquity"],
   ["Bet", "betMix"],
+  ["Noise", "noise"],
 ];
 
 /** Core sliders that moved at least 0.02 from the previous champion, or from Baseline. */
