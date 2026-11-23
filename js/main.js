@@ -237,6 +237,8 @@ function styleBits(params) {
     ["Tight", num("tightness")],
     ["Aggr", num("aggression")],
     ["Bluff", num("bluff")],
+    ["Fold", num("foldEquity")],
+    ["Bet", num("betMix")],
   ];
 }
 
